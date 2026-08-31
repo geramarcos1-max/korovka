@@ -40,6 +40,13 @@ export default function Clientes() {
     load()
   }
 
+  async function eliminar(c) {
+    if (!window.confirm(`¿Eliminar "${c.nombre}" permanentemente? Esta acción no se puede deshacer.`)) return
+    const { error } = await supabase.from('clientes').delete().eq('id', c.id)
+    if (error) { alert('No se pudo eliminar: ' + error.message); return }
+    load()
+  }
+
   const filtered = rows.filter(r =>
     r.nombre.toLowerCase().includes(q.toLowerCase()) ||
     (r.contacto || '').toLowerCase().includes(q.toLowerCase())
@@ -89,6 +96,7 @@ export default function Clientes() {
                     <div className="gap-8">
                       <button className="btn btn-ghost btn-sm" onClick={() => openEdit(c)}>Editar</button>
                       <button className="btn btn-ghost btn-sm" onClick={() => toggle(c)}>{c.activo ? 'Desactivar' : 'Activar'}</button>
+                      <button className="btn btn-red btn-sm" onClick={() => eliminar(c)}>Eliminar</button>
                     </div>
                   </td>
                 </tr>
