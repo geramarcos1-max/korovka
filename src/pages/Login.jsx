@@ -23,76 +23,64 @@ export default function Login() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'var(--bg)',
+      background: 'var(--cream)',
       display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 20,
     }}>
-      <div style={{ width: '100%', maxWidth: 380 }}>
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+      {/* Panel izquierdo — decorativo */}
+      <div style={{
+        width: '42%',
+        background: 'var(--forest)',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        padding: '48px 52px',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* Círculos decorativos */}
+        <div style={{
+          position: 'absolute', top: -80, right: -80,
+          width: 280, height: 280,
+          borderRadius: '50%',
+          background: 'rgba(255,255,255,.04)',
+        }} />
+        <div style={{
+          position: 'absolute', bottom: -60, left: -60,
+          width: 220, height: 220,
+          borderRadius: '50%',
+          background: 'rgba(255,255,255,.04)',
+        }} />
+
+        {/* Logo */}
+        <div>
           <div style={{
-            fontFamily: "'Barlow Condensed', sans-serif",
-            fontSize: 32,
+            fontFamily: "'Playfair Display', Georgia, serif",
+            fontSize: 44,
             fontWeight: 700,
-            color: 'var(--txt)',
-            letterSpacing: '.04em',
-          }}>KOROVKA</div>
+            color: '#fff',
+            letterSpacing: '-.02em',
+            lineHeight: 1,
+          }}>Korovka</div>
           <div style={{
             fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: '.12em',
+            fontWeight: 500,
+            letterSpacing: '.2em',
             textTransform: 'uppercase',
-            color: 'var(--amber)',
-            marginTop: 4,
+            color: 'rgba(255,255,255,.45)',
+            marginTop: 8,
           }}>Productos Lácteos</div>
         </div>
 
-        <div className="card" style={{ padding: 28 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 22 }}>Iniciar sesión</h2>
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label className="form-label">Email</label>
-              <input
-                type="email"
-                className="form-input"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                autoFocus
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Contraseña</label>
-              <input
-                type="password"
-                className="form-input"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            {error && (
-              <div style={{
-                background: 'var(--red-s)',
-                color: 'var(--red)',
-                padding: '8px 12px',
-                borderRadius: 'var(--r2)',
-                fontSize: 13,
-                marginBottom: 14,
-              }}>{error}</div>
-            )}
-            <button
-              type="submit"
-              className="btn btn-amber"
-              style={{ width: '100%', justifyContent: 'center', padding: '10px 16px', marginTop: 4 }}
-              disabled={loading}
-            >
-              {loading ? 'Entrando…' : 'Entrar'}
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
-  )
-}
+        {/* Frase inferior */}
+        <div>
+          <div style={{
+            fontFamily: "'Playfair Display', Georgia, serif",
+            fontSize: 22,
+            color: 'rgba(255,255,255,.85)',
+            lineHeight: 1.4,
+            fontWeight: 500,
+            marginBottom: 12,
+          }}>
+            Control comercial<br />de tu negocio.
+          </div>
+          
