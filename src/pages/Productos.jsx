@@ -44,6 +44,13 @@ export default function Productos() {
     load()
   }
 
+  async function eliminar(p) {
+    if (!window.confirm(`¿Eliminar "${p.nombre}" permanentemente? Esta acción no se puede deshacer.`)) return
+    const { error } = await supabase.from('productos').delete().eq('id', p.id)
+    if (error) { alert('No se pudo eliminar: ' + error.message); return }
+    load()
+  }
+
   if (loading) return <div className="empty">Cargando…</div>
 
   return (
@@ -87,6 +94,7 @@ export default function Productos() {
                       <button className="btn btn-ghost btn-sm" onClick={() => toggle(p)}>
                         {p.activo ? 'Desactivar' : 'Activar'}
                       </button>
+                      <button className="btn btn-red btn-sm" onClick={() => eliminar(p)}>Eliminar</button>
                     </div>
                   </td>
                 </tr>
