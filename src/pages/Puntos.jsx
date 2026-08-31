@@ -45,6 +45,13 @@ export default function Puntos() {
     load()
   }
 
+  async function eliminar(p) {
+    if (!window.confirm(`¿Eliminar "${p.nombre}" permanentemente? Esta acción no se puede deshacer.`)) return
+    const { error } = await supabase.from('puntos_distribucion').delete().eq('id', p.id)
+    if (error) { alert('No se pudo eliminar: ' + error.message); return }
+    load()
+  }
+
   if (loading) return <div className="empty">Cargando…</div>
 
   return (
@@ -84,6 +91,7 @@ export default function Puntos() {
                     <div className="gap-8">
                       <button className="btn btn-ghost btn-sm" onClick={() => openEdit(p)}>Editar</button>
                       <button className="btn btn-ghost btn-sm" onClick={() => toggle(p)}>{p.activo ? 'Desactivar' : 'Activar'}</button>
+                      <button className="btn btn-red btn-sm" onClick={() => eliminar(p)}>Eliminar</button>
                     </div>
                   </td>
                 </tr>
