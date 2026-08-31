@@ -83,4 +83,87 @@ export default function Login() {
           }}>
             Control comercial<br />de tu negocio.
           </div>
-          
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,.4)', lineHeight: 1.6 }}>
+            Ventas · Inventario · Consignación<br />Cuentas por Cobrar
+          </div>
+        </div>
+      </div>
+
+      {/* Panel derecho — formulario */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '48px 40px',
+      }}>
+        <div style={{ width: '100%', maxWidth: 360 }}>
+          <div style={{ marginBottom: 36 }}>
+            <h1 style={{
+              fontSize: 26,
+              fontWeight: 600,
+              color: 'var(--txt)',
+              letterSpacing: '-.02em',
+              marginBottom: 6,
+            }}>Bienvenido</h1>
+            <p style={{ fontSize: 14, color: 'var(--txt2)' }}>Ingresa tu email y contraseña para continuar.</p>
+          </div>
+
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label className="form-label">Email</label>
+              <input
+                type="email"
+                className="form-input"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                autoFocus
+                placeholder="tu@email.com"
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Contraseña</label>
+              <input
+                type="password"
+                className="form-input"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                placeholder="••••••••"
+              />
+            </div>
+
+            {error && (
+              <div style={{
+                background: 'var(--red-s)',
+                color: 'var(--red)',
+                padding: '10px 14px',
+                borderRadius: 'var(--r2)',
+                fontSize: 13,
+                marginBottom: 16,
+                border: '1px solid rgba(184,50,50,.15)',
+              }}>{error}</div>
+            )}
+
+            <button
+              type="submit"
+              className="btn btn-amber"
+              style={{
+                width: '100%',
+                justifyContent: 'center',
+                padding: '11px 16px',
+                fontSize: 14,
+                marginTop: 4,
+                borderRadius: 8,
+              }}
+              disabled={loading}
+            >
+              {loading ? 'Entrando…' : 'Iniciar sesión'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
+}
