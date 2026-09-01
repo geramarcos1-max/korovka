@@ -2,11 +2,12 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
-const IVA = 0.16
+const IVA_RATE = 0.16
+const PARTICULAR = '__particular__'
 function fmt(n) { return '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 }) }
 function folio(prefix) { return prefix + '-' + Date.now().toString(36).toUpperCase() }
 
-function PrintRemision({ venta, items, cliente, onClose }) {
+function PrintRemision({ venta, items, cliente, notas, conIva, onClose }) {
   const ref = useRef()
   function print() {
     const w = window.open('', '_blank')
@@ -24,7 +25,7 @@ function PrintRemision({ venta, items, cliente, onClose }) {
   }
 
   const sub = items.reduce((a, i) => a + i.subtotal, 0)
-  const iva = sub * IVA
+  const iva = conIva ? sub * IVA_RATE : 0
   const total = sub + iva
 
   return (
@@ -40,24 +41,28 @@ function PrintRemision({ venta, items, cliente, onClose }) {
         <div className="modal-body" ref={ref}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
             <div>
-              <div className="brand" style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 26, fontWeight: 700, letterSpacing: 2 }}>KOROVKA</div>
-              <div style={{ fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--amber)', fontWeight: 600 }}>Productos Lácteos</div>
+              <div style={{ fontFamily: 'Georgia,serif', fontSize: 26, fontWeight: 700, letterSpacing: 2 }}>KOROVKA</div>
+              <div style={{ fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: '#888', fontWeight: 600 }}>Productos Lácteos</div>
             </div>
             <div style={{ textAlign: 'right', fontSize: 13 }}>
               <div style={{ fontWeight: 700, fontSize: 16 }}>NOTA DE REMISIÓN</div>
-              <div className="mono" style={{ color: 'var(--amber)', marginTop: 4 }}>#{venta.folio}</div>
-              <div style={{ color: 'var(--txt2)', fontSize: 12, marginTop: 2 }}>{venta.fecha}</div>
+              <div style={{ fontFamily: 'monospace', color: '#1E3D2C', marginTop: 4 }}>#{venta.folio}</div>
+              <div style={{ color: '#888', fontSize: 12, marginTop: 2 }}>{venta.fecha}</div>
             </div>
           </div>
-          <hr style={{ border: 'none', borderTop: '1px solid var(--bdr)', margin: '10px 0 14px' }} />
-          {cliente && (
-            <div style={{ fontSize: 13, marginBottom: 14 }}>
-              <div style={{ fontWeight: 600, marginBottom: 2 }}>Cliente:</div>
-              <div>{cliente.nombre}</div>
-              {cliente.rfc && <div style={{ color: 'var(--txt2)' }}>RFC: {cliente.rfc}</div>}
-              {cliente.direccion && <div style={{ color: 'var(--txt2)' }}>{cliente.direccion}</div>}
-            </div>
-          )}
+          <hr style={{ border: 'none', borderTop: '1px solid #ddd', margin: '10px 0 14px' }} />
+          <div style={{ fontSize: 13, marginBottom: 14 }}>
+            <div style={{ fontWeight: 600, marginBottom: 2 }}>Cliente:</div>
+            {cliente ? (
+              <>
+                <div>{cliente.nombre}</div>
+                {cliente.rfc && <div style={{ color: '#888' }}>RFC: {cliente.rfc}</div>}
+                {cliente.direccion && <div style={{ color: '#888' }}>{cliente.direccion}</div>}
+              </>
+            ) : (
+              <div>Cliente particular{notas ? ` — ${notas}` : ''}</div>
+            )}
+          </div>
           <div className="table-wrap">
             <table>
               <thead>
@@ -80,18 +85,18 @@ function PrintRemision({ venta, items, cliente, onClose }) {
               </tbody>
               <tfoot>
                 <tr><td colSpan={3} style={{ textAlign: 'right' }}>Subtotal</td><td style={{ textAlign: 'right' }}>{fmt(sub)}</td></tr>
-                <tr><td colSpan={3} style={{ textAlign: 'right' }}>IVA (16%)</td><td style={{ textAlign: 'right' }}>{fmt(iva)}</td></tr>
-                <tr style={{ fontWeight: 700, background: 'var(--amber-s)' }}>
+                {conIva && <tr><td colSpan={3} style={{ textAlign: 'right' }}>IVA (16%)</td><td style={{ textAlign: 'right' }}>{fmt(iva)}</td></tr>}
+                <tr style={{ fontWeight: 700, background: '#fef8ec' }}>
                   <td colSpan={3} style={{ textAlign: 'right' }}>TOTAL</td>
-                  <td style={{ textAlign: 'right', color: 'var(--amber-t)' }}>{fmt(total)}</td>
+                  <td style={{ textAlign: 'right' }}>{fmt(total)}</td>
                 </tr>
               </tfoot>
             </table>
           </div>
-          {venta.notas && <div style={{ marginTop: 14, fontSize: 13, color: 'var(--txt2)' }}><strong>Notas:</strong> {venta.notas}</div>}
-          <div style={{ marginTop: 28, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, fontSize: 12, color: 'var(--txt2)' }}>
-            <div style={{ borderTop: '1px solid var(--bdr)', paddingTop: 8, textAlign: 'center' }}>Entregó</div>
-            <div style={{ borderTop: '1px solid var(--bdr)', paddingTop: 8, textAlign: 'center' }}>Recibió</div>
+          {notas && <div style={{ marginTop: 14, fontSize: 13, color: '#666' }}><strong>Notas:</strong> {notas}</div>}
+          <div style={{ marginTop: 28, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, fontSize: 12, color: '#888' }}>
+            <div style={{ borderTop: '1px solid #ddd', paddingTop: 8, textAlign: 'center' }}>Entregó</div>
+            <div style={{ borderTop: '1px solid #ddd', paddingTop: 8, textAlign: 'center' }}>Recibió</div>
           </div>
         </div>
       </div>
@@ -111,7 +116,13 @@ export default function Ventas() {
   const [err, setErr] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const [form, setForm] = useState({ cliente_id: '', punto_id: '', fecha: new Date().toISOString().slice(0, 10), notas: '' })
+  const [form, setForm] = useState({
+    cliente_id: '',
+    punto_id: '',
+    fecha: new Date().toISOString().slice(0, 10),
+    notas: '',
+    con_iva: true,
+  })
   const [items, setItems] = useState([{ producto_id: '', cantidad: 1, precio_unitario: '' }])
 
   async function load() {
@@ -146,17 +157,22 @@ export default function Ventas() {
   }
 
   const subtotal = items.reduce((a, it) => a + (Number(it.cantidad) * Number(it.precio_unitario || 0)), 0)
-  const iva = subtotal * IVA
+  const iva = form.con_iva ? subtotal * IVA_RATE : 0
   const total = subtotal + iva
 
+  const esParticular = form.cliente_id === PARTICULAR
+
   async function save() {
-    if (!form.cliente_id) { setErr('Selecciona un cliente.'); return }
+    if (!form.cliente_id) { setErr('Selecciona un cliente o "Cliente particular".'); return }
     if (items.some(i => !i.producto_id || !i.cantidad || !i.precio_unitario)) { setErr('Completa todos los productos.'); return }
     setSaving(true)
+
+    const clienteIdReal = esParticular ? null : form.cliente_id
+
     const { data: venta, error } = await supabase.from('ventas').insert({
       folio: folio('VD'),
       tipo: 'directa',
-      cliente_id: form.cliente_id,
+      cliente_id: clienteIdReal,
       punto_id: form.punto_id || null,
       fecha: form.fecha,
       subtotal,
@@ -177,12 +193,14 @@ export default function Ventas() {
     }))
     await supabase.from('venta_items').insert(ventaItems)
 
-    await supabase.from('cuentas_por_cobrar').insert({
-      venta_id: venta.id,
-      cliente_id: form.cliente_id,
-      monto_total: total,
-      monto_pagado: 0,
-    })
+    if (!esParticular) {
+      await supabase.from('cuentas_por_cobrar').insert({
+        venta_id: venta.id,
+        cliente_id: clienteIdReal,
+        monto_total: total,
+        monto_pagado: 0,
+      })
+    }
 
     const movimientos = items.map(i => ({
       producto_id: i.producto_id,
@@ -197,22 +215,18 @@ export default function Ventas() {
 
     setSaving(false)
     setModal(false)
-    setForm({ cliente_id: '', punto_id: '', fecha: new Date().toISOString().slice(0, 10), notas: '' })
+    setForm({ cliente_id: '', punto_id: '', fecha: new Date().toISOString().slice(0, 10), notas: '', con_iva: true })
     setItems([{ producto_id: '', cantidad: 1, precio_unitario: '' }])
     load()
   }
 
-  async function marcarPagada(id) {
-    await supabase.from('ventas').update({ estado: 'pagada' }).eq('id', id)
-    await supabase.from('cuentas_por_cobrar').update({ estado: 'pagada', monto_pagado: supabase.rpc('monto_total') }).eq('venta_id', id)
-    load()
-  }
-
   async function openPrint(v) {
-    const [{ data: vitems }, { data: cliente }] = await Promise.all([
-      supabase.from('venta_items').select('*, productos(nombre, unidad)').eq('venta_id', v.id),
-      supabase.from('clientes').select('*').eq('id', v.cliente_id).single(),
-    ])
+    const { data: vitems } = await supabase.from('venta_items').select('*, productos(nombre, unidad)').eq('venta_id', v.id)
+    let cliente = null
+    if (v.cliente_id) {
+      const { data } = await supabase.from('clientes').select('*').eq('id', v.cliente_id).single()
+      cliente = data
+    }
     const mappedItems = (vitems || []).map(i => ({
       producto_nombre: i.productos?.nombre,
       unidad: i.productos?.unidad,
@@ -220,7 +234,7 @@ export default function Ventas() {
       precio_unitario: i.precio_unitario,
       subtotal: i.subtotal,
     }))
-    setPrintData({ venta: v, items: mappedItems, cliente })
+    setPrintData({ venta: v, items: mappedItems, cliente, notas: v.notas, conIva: v.iva > 0 })
   }
 
   const estadoBadge = e => ({
@@ -258,7 +272,7 @@ export default function Ventas() {
               {ventas.map(v => (
                 <tr key={v.id}>
                   <td className="mono">{v.folio}</td>
-                  <td>{v.clientes?.nombre || '—'}</td>
+                  <td>{v.clientes?.nombre || <span style={{ color: 'var(--txt3)', fontSize: 12 }}>Cliente particular</span>}</td>
                   <td>{v.fecha}</td>
                   <td className="txt-right mono">{fmt(v.subtotal)}</td>
                   <td className="txt-right mono">{fmt(v.iva)}</td>
@@ -267,9 +281,6 @@ export default function Ventas() {
                   <td>
                     <div className="gap-8">
                       <button className="btn btn-ghost btn-sm" onClick={() => openPrint(v)}>🖨 Remisión</button>
-                      {v.estado === 'pendiente' && (
-                        <button className="btn btn-ok btn-sm" onClick={() => marcarPagada(v.id)}>Marcar pagada</button>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -292,6 +303,7 @@ export default function Ventas() {
                   <label className="form-label">Cliente *</label>
                   <select className="form-select" value={form.cliente_id} onChange={e => setForm(f => ({ ...f, cliente_id: e.target.value }))}>
                     <option value="">Seleccionar…</option>
+                    <option value={PARTICULAR}>— Cliente particular —</option>
                     {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                   </select>
                 </div>
@@ -300,6 +312,19 @@ export default function Ventas() {
                   <input type="date" className="form-input" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} />
                 </div>
               </div>
+
+              <div className="form-group">
+                <label className="form-label">
+                  {esParticular ? 'Nombre del comprador / Notas' : 'Notas'}
+                </label>
+                <input
+                  className="form-input"
+                  value={form.notas}
+                  onChange={e => setForm(f => ({ ...f, notas: e.target.value }))}
+                  placeholder={esParticular ? 'Ej: Juan García' : 'Opcional'}
+                />
+              </div>
+
               <div className="form-group">
                 <label className="form-label">Punto de distribución</label>
                 <select className="form-select" value={form.punto_id} onChange={e => setForm(f => ({ ...f, punto_id: e.target.value }))}>
@@ -326,21 +351,57 @@ export default function Ventas() {
                     {i === 0 && <label className="form-label">Precio</label>}
                     <input type="number" className="form-input" value={item.precio_unitario} onChange={e => updateItem(i, 'precio_unitario', e.target.value)} min="0" step="0.01" />
                   </div>
-                  <button className="btn btn-ghost btn-sm" onClick={() => removeItem(i)} style={{ marginBottom: 0 }}>✕</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => removeItem(i)}>✕</button>
                 </div>
               ))}
               <button className="btn btn-ghost btn-sm" onClick={addItem} style={{ marginBottom: 14 }}>+ Agregar producto</button>
 
-              <div style={{ background: 'var(--amber-s)', borderRadius: 'var(--r2)', padding: '12px 14px', fontSize: 13 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Subtotal</span><span className="mono">{fmt(subtotal)}</span></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--txt2)' }}><span>IVA (16%)</span><span className="mono">{fmt(iva)}</span></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, marginTop: 4, color: 'var(--amber-t)' }}><span>Total</span><span className="mono">{fmt(total)}</span></div>
+              <div style={{ background: 'var(--forest-s)', borderRadius: 'var(--r2)', padding: '12px 14px', fontSize: 13 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ color: 'var(--txt2)' }}>Subtotal</span>
+                  <span className="mono">{fmt(subtotal)}</span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, con_iva: !f.con_iva }))}
+                      style={{
+                        width: 36, height: 20,
+                        borderRadius: 10,
+                        border: 'none',
+                        background: form.con_iva ? 'var(--forest)' : 'var(--bdr2)',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        transition: 'background .15s',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <span style={{
+                        position: 'absolute',
+                        top: 2, left: form.con_iva ? 18 : 2,
+                        width: 16, height: 16,
+                        borderRadius: '50%',
+                        background: '#fff',
+                        transition: 'left .15s',
+                      }} />
+                    </button>
+                    <span style={{ color: form.con_iva ? 'var(--txt)' : 'var(--txt3)' }}>
+                      IVA (16%)
+                    </span>
+                  </div>
+                  <span className="mono" style={{ color: form.con_iva ? 'var(--txt)' : 'var(--txt3)' }}>
+                    {fmt(iva)}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid var(--bdr)', paddingTop: 8, color: 'var(--forest)' }}>
+                  <span>Total</span>
+                  <span className="mono">{fmt(total)}</span>
+                </div>
               </div>
 
-              <div className="form-group" style={{ marginTop: 12, marginBottom: 0 }}>
-                <label className="form-label">Notas</label>
-                <input className="form-input" value={form.notas} onChange={e => setForm(f => ({ ...f, notas: e.target.value }))} placeholder="Opcional" />
-              </div>
               {err && <div style={{ color: 'var(--red)', fontSize: 13, marginTop: 8 }}>{err}</div>}
             </div>
             <div className="modal-foot">
@@ -356,6 +417,8 @@ export default function Ventas() {
           venta={printData.venta}
           items={printData.items}
           cliente={printData.cliente}
+          notas={printData.notas}
+          conIva={printData.conIva}
           onClose={() => setPrintData(null)}
         />
       )}
