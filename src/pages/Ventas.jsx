@@ -235,6 +235,15 @@ export default function Ventas() {
     load()
   }
 
+  async function eliminar(v) {
+    if (!window.confirm(`¿Eliminar la venta ${v.folio}?\n\nEsta acción no se puede deshacer. Se eliminarán también los movimientos de inventario y la cuenta por cobrar asociada.`)) return
+    await supabase.from('cuentas_por_cobrar').delete().eq('venta_id', v.id)
+    await supabase.from('movimientos_inventario').delete().eq('referencia_id', v.id).eq('referencia_tipo', 'venta')
+    await supabase.from('venta_items').delete().eq('venta_id', v.id)
+    await supabase.from('ventas').delete().eq('id', v.id)
+    load()
+  }
+
   async function openPrint(v) {
     const { data: vitems } = await supabase.from('venta_items').select('*, productos(nombre, unidad)').eq('venta_id', v.id)
     let cliente = null
@@ -319,7 +328,10 @@ export default function Ventas() {
                     </button>
                   </td>
                   <td>
-                    <button className="btn btn-ghost btn-sm" onClick={() => openPrint(v)}>🖨 Remisión</button>
+                    <div className="gap-8">
+                      <button className="btn btn-ghost btn-sm" onClick={() => openPrint(v)}>🖨 Remisión</button>
+                      <button className="btn btn-red btn-sm" onClick={() => eliminar(v)}>Eliminar</button>
+                    </div>
                   </td>
                 </tr>
               ))}
