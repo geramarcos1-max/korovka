@@ -14,9 +14,8 @@ function PrintRemision({ venta, items, cliente, notas, conIva, onClose }) {
     w.document.write('<html><head><title>Nota de Remisión</title>')
     w.document.write('<style>body{font-family:sans-serif;padding:20px;max-width:600px;margin:0 auto}')
     w.document.write('table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:6px 10px;font-size:13px}')
-    w.document.write('th{background:#f5f5f5;font-weight:600}.right{text-align:right}.brand{font-size:22px;font-weight:700;letter-spacing:2px}')
-    w.document.write('.sub{font-size:11px;color:#888;letter-spacing:1px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:16px 0;font-size:13px}')
-    w.document.write('.total-row td{font-weight:700;background:#fef8ec}.hr{border:none;border-top:1px solid #ddd;margin:12px 0}')
+    w.document.write('th{background:#f5f5f5;font-weight:600}.right{text-align:right}')
+    w.document.write('.total-row td{font-weight:700;background:#fef8ec}')
     w.document.write('</style></head><body>')
     w.document.write(ref.current.innerHTML)
     w.document.write('</body></html>')
@@ -161,7 +160,6 @@ export default function Ventas() {
   const subtotal = items.reduce((a, it) => a + (Number(it.cantidad) * Number(it.precio_unitario || 0)), 0)
   const iva = form.con_iva ? subtotal * IVA_RATE : 0
   const total = subtotal + iva
-
   const esParticular = form.cliente_id === PARTICULAR
 
   async function save() {
@@ -254,12 +252,6 @@ export default function Ventas() {
     setPrintData({ venta: v, items: mappedItems, cliente, notas: v.notas, conIva: v.iva > 0 })
   }
 
-  const estadoBadge = e => ({
-    pendiente: <span className="badge b-amber">Pendiente</span>,
-    pagada: <span className="badge b-ok">Pagada</span>,
-    cancelada: <span className="badge b-red">Cancelada</span>,
-  }[e] || <span className="badge b-neu">{e}</span>)
-
   if (loading) return <div className="empty">Cargando…</div>
 
   return (
@@ -276,6 +268,7 @@ export default function Ventas() {
               <tr>
                 <th>Folio</th>
                 <th>Cliente</th>
+                <th>Notas</th>
                 <th>Fecha</th>
                 <th className="txt-right">Subtotal</th>
                 <th className="txt-right">IVA</th>
@@ -286,11 +279,14 @@ export default function Ventas() {
               </tr>
             </thead>
             <tbody>
-              {ventas.length === 0 && <tr><td colSpan={9} className="empty">Sin ventas</td></tr>}
+              {ventas.length === 0 && <tr><td colSpan={10} className="empty">Sin ventas</td></tr>}
               {ventas.map(v => (
                 <tr key={v.id}>
                   <td className="mono">{v.folio}</td>
                   <td>{v.clientes?.nombre || <span style={{ color: 'var(--txt3)', fontSize: 12 }}>Cliente particular</span>}</td>
+                  <td style={{ fontSize: 12, color: 'var(--txt2)', maxWidth: 180 }}>
+                    {v.notas || <span style={{ color: 'var(--txt3)' }}>—</span>}
+                  </td>
                   <td>{v.fecha}</td>
                   <td className="txt-right mono">{fmt(v.subtotal)}</td>
                   <td className="txt-right mono">{fmt(v.iva)}</td>
@@ -323,9 +319,7 @@ export default function Ventas() {
                     </button>
                   </td>
                   <td>
-                    <div className="gap-8">
-                      <button className="btn btn-ghost btn-sm" onClick={() => openPrint(v)}>🖨 Remisión</button>
-                    </div>
+                    <button className="btn btn-ghost btn-sm" onClick={() => openPrint(v)}>🖨 Remisión</button>
                   </td>
                 </tr>
               ))}
@@ -357,7 +351,6 @@ export default function Ventas() {
                 </div>
               </div>
 
-              {/* Campo de notas visible siempre, pero con label adaptado */}
               <div className="form-group">
                 <label className="form-label">
                   {esParticular ? 'Nombre del comprador / Notas' : 'Notas'}
@@ -401,55 +394,37 @@ export default function Ventas() {
               ))}
               <button className="btn btn-ghost btn-sm" onClick={addItem} style={{ marginBottom: 14 }}>+ Agregar producto</button>
 
-              {/* Toggle IVA + resumen */}
               <div style={{ background: 'var(--forest-s)', borderRadius: 'var(--r2)', padding: '12px 14px', fontSize: 13 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                   <span style={{ color: 'var(--txt2)' }}>Subtotal</span>
                   <span className="mono">{fmt(subtotal)}</span>
                 </div>
-
-                {/* Fila IVA con toggle */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <button
                       type="button"
                       onClick={() => setForm(f => ({ ...f, con_iva: !f.con_iva }))}
                       style={{
-                        width: 36, height: 20,
-                        borderRadius: 10,
-                        border: 'none',
+                        width: 36, height: 20, borderRadius: 10, border: 'none',
                         background: form.con_iva ? 'var(--forest)' : 'var(--bdr2)',
-                        cursor: 'pointer',
-                        position: 'relative',
-                        transition: 'background .15s',
-                        flexShrink: 0,
+                        cursor: 'pointer', position: 'relative', transition: 'background .15s', flexShrink: 0,
                       }}
                     >
                       <span style={{
-                        position: 'absolute',
-                        top: 2, left: form.con_iva ? 18 : 2,
-                        width: 16, height: 16,
-                        borderRadius: '50%',
-                        background: '#fff',
-                        transition: 'left .15s',
+                        position: 'absolute', top: 2, left: form.con_iva ? 18 : 2,
+                        width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .15s',
                       }} />
                     </button>
-                    <span style={{ color: form.con_iva ? 'var(--txt)' : 'var(--txt3)' }}>
-                      IVA (16%)
-                    </span>
+                    <span style={{ color: form.con_iva ? 'var(--txt)' : 'var(--txt3)' }}>IVA (16%)</span>
                   </div>
-                  <span className="mono" style={{ color: form.con_iva ? 'var(--txt)' : 'var(--txt3)' }}>
-                    {fmt(iva)}
-                  </span>
+                  <span className="mono" style={{ color: form.con_iva ? 'var(--txt)' : 'var(--txt3)' }}>{fmt(iva)}</span>
                 </div>
-
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid var(--bdr)', paddingTop: 8, color: 'var(--forest)' }}>
                   <span>Total</span>
                   <span className="mono">{fmt(total)}</span>
                 </div>
               </div>
 
-              {/* Método de pago + Estado */}
               <div className="form-row" style={{ marginTop: 12 }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Método de pago</label>
