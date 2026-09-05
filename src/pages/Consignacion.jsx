@@ -18,6 +18,7 @@ export default function Consignacion() {
 
   const [modalEntrega, setModalEntrega] = useState(false)
   const [modalLiq, setModalLiq] = useState(false)
+  const [modalPunto, setModalPunto] = useState(false)
   const [selectedEntrega, setSelectedEntrega] = useState(null)
 
   const [formE, setFormE] = useState({ punto_id: '', fecha: new Date().toISOString().slice(0, 10), notas: '' })
@@ -25,6 +26,10 @@ export default function Consignacion() {
 
   const [formL, setFormL] = useState({ metodo: 'reporte_tienda', cliente_id: '' })
   const [itemsL, setItemsL] = useState([])
+
+  const [formP, setFormP] = useState({ nombre: '', cliente_id: '', direccion: '' })
+  const [savingPunto, setSavingPunto] = useState(false)
+  const [errPunto, setErrPunto] = useState('')
 
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
@@ -59,6 +64,25 @@ export default function Consignacion() {
       }
       return next
     })
+  }
+
+  async function savePunto() {
+    if (!formP.nombre) { setErrPunto('El nombre es requerido.'); return }
+    setSavingPunto(true)
+    const { data, error } = await supabase.from('puntos_distribucion').insert({
+      nombre: formP.nombre,
+      cliente_id: formP.cliente_id || null,
+      direccion: formP.direccion || null,
+      modelo: 'consignacion',
+      activo: true,
+    }).select().single()
+    setSavingPunto(false)
+    if (error) { setErrPunto(error.message); return }
+    await load()
+    setFormE(f => ({ ...f, punto_id: data.id }))
+    setModalPunto(false)
+    setFormP({ nombre: '', cliente_id: '', direccion: '' })
+    setErrPunto('')
   }
 
   async function saveEntrega() {
@@ -139,9 +163,6 @@ export default function Consignacion() {
     if (itemsL.some(i => i.cantidad_vendida === '')) { setErr('Ingresa las cantidades vendidas.'); return }
     setSaving(true)
 
-    const punto = puntos.find(p => p.id === selectedEntrega.punto_id) ||
-      { nombre: selectedEntrega.puntos_distribucion?.nombre }
-
     let clienteId = formL.cliente_id || null
     if (!clienteId && selectedEntrega.cliente_id) clienteId = selectedEntrega.cliente_id
 
@@ -156,12 +177,6 @@ export default function Consignacion() {
       total: totalLiq,
       creado_por: profile?.id,
     }).select().single()
-
-    if (venta.data === null) {
-      setSaving(false)
-      setErr('Error al crear la venta.')
-      return
-    }
 
     const liqItems = itemsL.map(i => ({
       producto_id: i.producto_id,
@@ -302,10 +317,25 @@ export default function Consignacion() {
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Punto de distribución *</label>
-                  <select className="form-select" value={formE.punto_id} onChange={e => setFormE(f => ({ ...f, punto_id: e.target.value }))}>
-                    <option value="">Seleccionar…</option>
-                    {puntos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                  </select>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <select
+                      className="form-select"
+                      style={{ flex: 1 }}
+                      value={formE.punto_id}
+                      onChange={e => setFormE(f => ({ ...f, punto_id: e.target.value }))}
+                    >
+                      <option value="">Seleccionar…</option>
+                      {puntos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+                      onClick={() => { setErrPunto(''); setModalPunto(true) }}
+                    >
+                      + Nuevo
+                    </button>
+                  </div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Fecha</label>
@@ -343,6 +373,53 @@ export default function Consignacion() {
             <div className="modal-foot">
               <button className="btn btn-ghost" onClick={() => setModalEntrega(false)}>Cancelar</button>
               <button className="btn btn-amber" onClick={saveEntrega} disabled={saving}>{saving ? 'Guardando…' : 'Registrar entrega'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mini-modal nuevo punto de distribución */}
+      {modalPunto && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }}>
+          <div className="modal" style={{ maxWidth: 420 }}>
+            <div className="modal-head">
+              <span className="modal-title">Nuevo punto de distribución</span>
+              <button className="modal-close" onClick={() => setModalPunto(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label className="form-label">Nombre *</label>
+                <input
+                  className="form-input"
+                  value={formP.nombre}
+                  onChange={e => setFormP(f => ({ ...f, nombre: e.target.value }))}
+                  placeholder="Ej: Carnicería El Rancho"
+                  autoFocus
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Cliente asociado</label>
+                <select className="form-select" value={formP.cliente_id} onChange={e => setFormP(f => ({ ...f, cliente_id: e.target.value }))}>
+                  <option value="">— Sin cliente —</option>
+                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </select>
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Dirección</label>
+                <input
+                  className="form-input"
+                  value={formP.direccion}
+                  onChange={e => setFormP(f => ({ ...f, direccion: e.target.value }))}
+                  placeholder="Opcional"
+                />
+              </div>
+              {errPunto && <div style={{ color: 'var(--red)', fontSize: 13, marginTop: 8 }}>{errPunto}</div>}
+            </div>
+            <div className="modal-foot">
+              <button className="btn btn-ghost" onClick={() => setModalPunto(false)}>Cancelar</button>
+              <button className="btn btn-amber" onClick={savePunto} disabled={savingPunto}>
+                {savingPunto ? 'Guardando…' : 'Crear punto'}
+              </button>
             </div>
           </div>
         </div>
