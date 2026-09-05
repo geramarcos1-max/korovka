@@ -122,6 +122,8 @@ export default function Ventas() {
     fecha: new Date().toISOString().slice(0, 10),
     notas: '',
     con_iva: true,
+    estado: 'pendiente',
+    metodo_pago: 'efectivo',
   })
   const [items, setItems] = useState([{ producto_id: '', cantidad: 1, precio_unitario: '' }])
 
@@ -179,6 +181,8 @@ export default function Ventas() {
       iva,
       total,
       notas: form.notas,
+      estado: form.estado,
+      metodo_pago: form.metodo_pago,
       creado_por: profile?.id,
     }).select().single()
 
@@ -198,7 +202,8 @@ export default function Ventas() {
         venta_id: venta.id,
         cliente_id: clienteIdReal,
         monto_total: total,
-        monto_pagado: 0,
+        monto_pagado: form.estado === 'pagada' ? total : 0,
+        estado: form.estado === 'pagada' ? 'pagada' : 'pendiente',
       })
     }
 
@@ -215,8 +220,20 @@ export default function Ventas() {
 
     setSaving(false)
     setModal(false)
-    setForm({ cliente_id: '', punto_id: '', fecha: new Date().toISOString().slice(0, 10), notas: '', con_iva: true })
+    setForm({ cliente_id: '', punto_id: '', fecha: new Date().toISOString().slice(0, 10), notas: '', con_iva: true, estado: 'pendiente', metodo_pago: 'efectivo' })
     setItems([{ producto_id: '', cantidad: 1, precio_unitario: '' }])
+    load()
+  }
+
+  async function toggleEstado(v) {
+    const nuevoEstado = v.estado === 'pagada' ? 'pendiente' : 'pagada'
+    await supabase.from('ventas').update({ estado: nuevoEstado }).eq('id', v.id)
+    if (v.cliente_id) {
+      await supabase.from('cuentas_por_cobrar').update({
+        estado: nuevoEstado,
+        monto_pagado: nuevoEstado === 'pagada' ? v.total : 0,
+      }).eq('venta_id', v.id)
+    }
     load()
   }
 
@@ -263,12 +280,13 @@ export default function Ventas() {
                 <th className="txt-right">Subtotal</th>
                 <th className="txt-right">IVA</th>
                 <th className="txt-right">Total</th>
+                <th>Pago</th>
                 <th>Estado</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {ventas.length === 0 && <tr><td colSpan={8} className="empty">Sin ventas</td></tr>}
+              {ventas.length === 0 && <tr><td colSpan={9} className="empty">Sin ventas</td></tr>}
               {ventas.map(v => (
                 <tr key={v.id}>
                   <td className="mono">{v.folio}</td>
@@ -277,7 +295,33 @@ export default function Ventas() {
                   <td className="txt-right mono">{fmt(v.subtotal)}</td>
                   <td className="txt-right mono">{fmt(v.iva)}</td>
                   <td className="txt-right mono" style={{ fontWeight: 600 }}>{fmt(v.total)}</td>
-                  <td>{estadoBadge(v.estado)}</td>
+                  <td>
+                    {v.metodo_pago === 'transferencia'
+                      ? <span className="badge b-info">Transferencia</span>
+                      : <span className="badge b-neu">Efectivo</span>}
+                  </td>
+                  <td>
+                    <button
+                      onClick={() => toggleEstado(v)}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        padding: '3px 10px', borderRadius: 100,
+                        border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 500,
+                        background: v.estado === 'pagada' ? 'var(--ok-s)' : 'var(--amber-s)',
+                        color: v.estado === 'pagada' ? 'var(--ok-t)' : 'var(--amber-t)',
+                        transition: 'background .15s',
+                        fontFamily: 'inherit',
+                      }}
+                      title="Clic para cambiar estado"
+                    >
+                      <span style={{
+                        width: 6, height: 6, borderRadius: '50%',
+                        background: v.estado === 'pagada' ? 'var(--ok)' : 'var(--amber)',
+                        flexShrink: 0,
+                      }} />
+                      {v.estado === 'pagada' ? 'Pagada' : 'Pendiente'}
+                    </button>
+                  </td>
                   <td>
                     <div className="gap-8">
                       <button className="btn btn-ghost btn-sm" onClick={() => openPrint(v)}>🖨 Remisión</button>
@@ -313,6 +357,7 @@ export default function Ventas() {
                 </div>
               </div>
 
+              {/* Campo de notas visible siempre, pero con label adaptado */}
               <div className="form-group">
                 <label className="form-label">
                   {esParticular ? 'Nombre del comprador / Notas' : 'Notas'}
@@ -356,12 +401,14 @@ export default function Ventas() {
               ))}
               <button className="btn btn-ghost btn-sm" onClick={addItem} style={{ marginBottom: 14 }}>+ Agregar producto</button>
 
+              {/* Toggle IVA + resumen */}
               <div style={{ background: 'var(--forest-s)', borderRadius: 'var(--r2)', padding: '12px 14px', fontSize: 13 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                   <span style={{ color: 'var(--txt2)' }}>Subtotal</span>
                   <span className="mono">{fmt(subtotal)}</span>
                 </div>
 
+                {/* Fila IVA con toggle */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <button
@@ -399,6 +446,24 @@ export default function Ventas() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid var(--bdr)', paddingTop: 8, color: 'var(--forest)' }}>
                   <span>Total</span>
                   <span className="mono">{fmt(total)}</span>
+                </div>
+              </div>
+
+              {/* Método de pago + Estado */}
+              <div className="form-row" style={{ marginTop: 12 }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Método de pago</label>
+                  <select className="form-select" value={form.metodo_pago} onChange={e => setForm(f => ({ ...f, metodo_pago: e.target.value }))}>
+                    <option value="efectivo">Efectivo</option>
+                    <option value="transferencia">Transferencia</option>
+                  </select>
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Estado</label>
+                  <select className="form-select" value={form.estado} onChange={e => setForm(f => ({ ...f, estado: e.target.value }))}>
+                    <option value="pendiente">Pendiente</option>
+                    <option value="pagada">Pagada</option>
+                  </select>
                 </div>
               </div>
 
