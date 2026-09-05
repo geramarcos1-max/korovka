@@ -111,20 +111,19 @@ export default function Ventas() {
   const [productos, setProductos] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
+  const [editModal, setEditModal] = useState(false)
   const [printData, setPrintData] = useState(null)
   const [err, setErr] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const [form, setForm] = useState({
-    cliente_id: '',
-    punto_id: '',
-    fecha: new Date().toISOString().slice(0, 10),
-    notas: '',
-    con_iva: true,
-    estado: 'pendiente',
-    metodo_pago: 'efectivo',
-  })
+  const emptyForm = { cliente_id: '', punto_id: '', fecha: new Date().toISOString().slice(0, 10), notas: '', con_iva: true, estado: 'pendiente', metodo_pago: 'efectivo' }
+  const [form, setForm] = useState(emptyForm)
   const [items, setItems] = useState([{ producto_id: '', cantidad: 1, precio_unitario: '' }])
+
+  const [editForm, setEditForm] = useState(emptyForm)
+  const [editItems, setEditItems] = useState([{ producto_id: '', cantidad: 1, precio_unitario: '' }])
+  const [editingVenta, setEditingVenta] = useState(null)
+  const [errEdit, setErrEdit] = useState('')
 
   async function load() {
     const [{ data: v }, { data: c }, { data: p }, { data: pr }] = await Promise.all([
@@ -144,9 +143,22 @@ export default function Ventas() {
 
   function addItem() { setItems(it => [...it, { producto_id: '', cantidad: 1, precio_unitario: '' }]) }
   function removeItem(i) { setItems(it => it.filter((_, idx) => idx !== i)) }
-
   function updateItem(i, key, val) {
     setItems(it => {
+      const next = [...it]
+      next[i] = { ...next[i], [key]: val }
+      if (key === 'producto_id') {
+        const p = productos.find(p => p.id === val)
+        if (p) next[i].precio_unitario = p.precio_base
+      }
+      return next
+    })
+  }
+
+  function addEditItem() { setEditItems(it => [...it, { producto_id: '', cantidad: 1, precio_unitario: '' }]) }
+  function removeEditItem(i) { setEditItems(it => it.filter((_, idx) => idx !== i)) }
+  function updateEditItem(i, key, val) {
+    setEditItems(it => {
       const next = [...it]
       next[i] = { ...next[i], [key]: val }
       if (key === 'producto_id') {
@@ -161,6 +173,99 @@ export default function Ventas() {
   const iva = form.con_iva ? subtotal * IVA_RATE : 0
   const total = subtotal + iva
   const esParticular = form.cliente_id === PARTICULAR
+
+  const subtotalE = editItems.reduce((a, it) => a + (Number(it.cantidad) * Number(it.precio_unitario || 0)), 0)
+  const ivaE = editForm.con_iva ? subtotalE * IVA_RATE : 0
+  const totalE = subtotalE + ivaE
+  const esParticularE = editForm.cliente_id === PARTICULAR
+
+  async function openEdit(v) {
+    const { data: vitems } = await supabase.from('venta_items').select('*').eq('venta_id', v.id)
+    setEditingVenta(v)
+    setEditForm({
+      cliente_id: v.cliente_id || PARTICULAR,
+      punto_id: v.punto_id || '',
+      fecha: v.fecha,
+      notas: v.notas || '',
+      con_iva: v.iva > 0,
+      estado: v.estado,
+      metodo_pago: v.metodo_pago || 'efectivo',
+    })
+    setEditItems((vitems || []).map(i => ({
+      producto_id: i.producto_id,
+      cantidad: i.cantidad,
+      precio_unitario: i.precio_unitario,
+    })))
+    setErrEdit('')
+    setEditModal(true)
+  }
+
+  async function saveEdit() {
+    if (!editForm.cliente_id) { setErrEdit('Selecciona un cliente.'); return }
+    if (editItems.some(i => !i.producto_id || !i.cantidad || !i.precio_unitario)) { setErrEdit('Completa todos los productos.'); return }
+    setSaving(true)
+
+    const clienteIdReal = esParticularE ? null : editForm.cliente_id
+
+    await supabase.from('ventas').update({
+      cliente_id: clienteIdReal,
+      punto_id: editForm.punto_id || null,
+      fecha: editForm.fecha,
+      notas: editForm.notas,
+      subtotal: subtotalE,
+      iva: ivaE,
+      total: totalE,
+      estado: editForm.estado,
+      metodo_pago: editForm.metodo_pago,
+    }).eq('id', editingVenta.id)
+
+    // Reemplazar items
+    await supabase.from('venta_items').delete().eq('venta_id', editingVenta.id)
+    await supabase.from('venta_items').insert(editItems.map(i => ({
+      venta_id: editingVenta.id,
+      producto_id: i.producto_id,
+      cantidad: Number(i.cantidad),
+      precio_unitario: Number(i.precio_unitario),
+      subtotal: Number(i.cantidad) * Number(i.precio_unitario),
+    })))
+
+    // Reemplazar movimientos de inventario
+    await supabase.from('movimientos_inventario').delete().eq('referencia_id', editingVenta.id).eq('referencia_tipo', 'venta')
+    await supabase.from('movimientos_inventario').insert(editItems.map(i => ({
+      producto_id: i.producto_id,
+      tipo: 'salida',
+      cantidad: -Number(i.cantidad),
+      concepto: 'Venta directa ' + editingVenta.folio,
+      referencia_id: editingVenta.id,
+      referencia_tipo: 'venta',
+      creado_por: profile?.id,
+    })))
+
+    // Actualizar CxC si hay cliente
+    if (!esParticularE && clienteIdReal) {
+      const { data: cxc } = await supabase.from('cuentas_por_cobrar').select('id').eq('venta_id', editingVenta.id).single()
+      if (cxc) {
+        await supabase.from('cuentas_por_cobrar').update({
+          cliente_id: clienteIdReal,
+          monto_total: totalE,
+          monto_pagado: editForm.estado === 'pagada' ? totalE : 0,
+          estado: editForm.estado === 'pagada' ? 'pagada' : 'pendiente',
+        }).eq('venta_id', editingVenta.id)
+      } else {
+        await supabase.from('cuentas_por_cobrar').insert({
+          venta_id: editingVenta.id,
+          cliente_id: clienteIdReal,
+          monto_total: totalE,
+          monto_pagado: editForm.estado === 'pagada' ? totalE : 0,
+          estado: editForm.estado === 'pagada' ? 'pagada' : 'pendiente',
+        })
+      }
+    }
+
+    setSaving(false)
+    setEditModal(false)
+    load()
+  }
 
   async function save() {
     if (!form.cliente_id) { setErr('Selecciona un cliente o "Cliente particular".'); return }
@@ -186,14 +291,13 @@ export default function Ventas() {
 
     if (error) { setSaving(false); setErr(error.message); return }
 
-    const ventaItems = items.map(i => ({
+    await supabase.from('venta_items').insert(items.map(i => ({
       venta_id: venta.id,
       producto_id: i.producto_id,
       cantidad: Number(i.cantidad),
       precio_unitario: Number(i.precio_unitario),
       subtotal: Number(i.cantidad) * Number(i.precio_unitario),
-    }))
-    await supabase.from('venta_items').insert(ventaItems)
+    })))
 
     if (!esParticular) {
       await supabase.from('cuentas_por_cobrar').insert({
@@ -205,7 +309,7 @@ export default function Ventas() {
       })
     }
 
-    const movimientos = items.map(i => ({
+    await supabase.from('movimientos_inventario').insert(items.map(i => ({
       producto_id: i.producto_id,
       tipo: 'salida',
       cantidad: -Number(i.cantidad),
@@ -213,12 +317,11 @@ export default function Ventas() {
       referencia_id: venta.id,
       referencia_tipo: 'venta',
       creado_por: profile?.id,
-    }))
-    await supabase.from('movimientos_inventario').insert(movimientos)
+    })))
 
     setSaving(false)
     setModal(false)
-    setForm({ cliente_id: '', punto_id: '', fecha: new Date().toISOString().slice(0, 10), notas: '', con_iva: true, estado: 'pendiente', metodo_pago: 'efectivo' })
+    setForm(emptyForm)
     setItems([{ producto_id: '', cantidad: 1, precio_unitario: '' }])
     load()
   }
@@ -259,6 +362,63 @@ export default function Ventas() {
       subtotal: i.subtotal,
     }))
     setPrintData({ venta: v, items: mappedItems, cliente, notas: v.notas, conIva: v.iva > 0 })
+  }
+
+  function FormProductos({ itemsList, onAdd, onRemove, onUpdate, isEdit }) {
+    return (
+      <>
+        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10, marginTop: 4 }}>Productos</div>
+        {itemsList.map((item, i) => (
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'end' }}>
+            <div>
+              {i === 0 && <label className="form-label">Producto</label>}
+              <select className="form-select" value={item.producto_id} onChange={e => onUpdate(i, 'producto_id', e.target.value)}>
+                <option value="">Seleccionar…</option>
+                {productos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+            </div>
+            <div>
+              {i === 0 && <label className="form-label">Cantidad</label>}
+              <input type="number" className="form-input" value={item.cantidad} onChange={e => onUpdate(i, 'cantidad', e.target.value)} min="0" step="0.001" />
+            </div>
+            <div>
+              {i === 0 && <label className="form-label">Precio</label>}
+              <input type="number" className="form-input" value={item.precio_unitario} onChange={e => onUpdate(i, 'precio_unitario', e.target.value)} min="0" step="0.01" />
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => onRemove(i)}>✕</button>
+          </div>
+        ))}
+        <button className="btn btn-ghost btn-sm" onClick={onAdd} style={{ marginBottom: 14 }}>+ Agregar producto</button>
+      </>
+    )
+  }
+
+  function ResumenIVA({ sub, iv, tot, conIva, onToggle }) {
+    return (
+      <div style={{ background: 'var(--forest-s)', borderRadius: 'var(--r2)', padding: '12px 14px', fontSize: 13 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ color: 'var(--txt2)' }}>Subtotal</span>
+          <span className="mono">{fmt(sub)}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button type="button" onClick={onToggle} style={{
+              width: 36, height: 20, borderRadius: 10, border: 'none',
+              background: conIva ? 'var(--forest)' : 'var(--bdr2)',
+              cursor: 'pointer', position: 'relative', transition: 'background .15s', flexShrink: 0,
+            }}>
+              <span style={{ position: 'absolute', top: 2, left: conIva ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .15s' }} />
+            </button>
+            <span style={{ color: conIva ? 'var(--txt)' : 'var(--txt3)' }}>IVA (16%)</span>
+          </div>
+          <span className="mono" style={{ color: conIva ? 'var(--txt)' : 'var(--txt3)' }}>{fmt(iv)}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid var(--bdr)', paddingTop: 8, color: 'var(--forest)' }}>
+          <span>Total</span>
+          <span className="mono">{fmt(tot)}</span>
+        </div>
+      </div>
+    )
   }
 
   if (loading) return <div className="empty">Cargando…</div>
@@ -306,30 +466,21 @@ export default function Ventas() {
                       : <span className="badge b-neu">Efectivo</span>}
                   </td>
                   <td>
-                    <button
-                      onClick={() => toggleEstado(v)}
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 6,
-                        padding: '3px 10px', borderRadius: 100,
-                        border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 500,
-                        background: v.estado === 'pagada' ? 'var(--ok-s)' : 'var(--amber-s)',
-                        color: v.estado === 'pagada' ? 'var(--ok-t)' : 'var(--amber-t)',
-                        transition: 'background .15s',
-                        fontFamily: 'inherit',
-                      }}
-                      title="Clic para cambiar estado"
-                    >
-                      <span style={{
-                        width: 6, height: 6, borderRadius: '50%',
-                        background: v.estado === 'pagada' ? 'var(--ok)' : 'var(--amber)',
-                        flexShrink: 0,
-                      }} />
+                    <button onClick={() => toggleEstado(v)} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '3px 10px', borderRadius: 100, border: 'none', cursor: 'pointer',
+                      fontSize: 12, fontWeight: 500, fontFamily: 'inherit', transition: 'background .15s',
+                      background: v.estado === 'pagada' ? 'var(--ok-s)' : 'var(--amber-s)',
+                      color: v.estado === 'pagada' ? 'var(--ok-t)' : 'var(--amber-t)',
+                    }} title="Clic para cambiar estado">
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: v.estado === 'pagada' ? 'var(--ok)' : 'var(--amber)' }} />
                       {v.estado === 'pagada' ? 'Pagada' : 'Pendiente'}
                     </button>
                   </td>
                   <td>
                     <div className="gap-8">
                       <button className="btn btn-ghost btn-sm" onClick={() => openPrint(v)}>🖨 Remisión</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => openEdit(v)}>Editar</button>
                       <button className="btn btn-red btn-sm" onClick={() => eliminar(v)}>Eliminar</button>
                     </div>
                   </td>
@@ -340,6 +491,7 @@ export default function Ventas() {
         </div>
       </div>
 
+      {/* Modal nueva venta */}
       {modal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
           <div className="modal" style={{ maxWidth: 600 }}>
@@ -362,19 +514,10 @@ export default function Ventas() {
                   <input type="date" className="form-input" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} />
                 </div>
               </div>
-
               <div className="form-group">
-                <label className="form-label">
-                  {esParticular ? 'Nombre del comprador / Notas' : 'Notas'}
-                </label>
-                <input
-                  className="form-input"
-                  value={form.notas}
-                  onChange={e => setForm(f => ({ ...f, notas: e.target.value }))}
-                  placeholder={esParticular ? 'Ej: Juan García' : 'Opcional'}
-                />
+                <label className="form-label">{esParticular ? 'Nombre del comprador / Notas' : 'Notas'}</label>
+                <input className="form-input" value={form.notas} onChange={e => setForm(f => ({ ...f, notas: e.target.value }))} placeholder={esParticular ? 'Ej: Juan García' : 'Opcional'} />
               </div>
-
               <div className="form-group">
                 <label className="form-label">Punto de distribución</label>
                 <select className="form-select" value={form.punto_id} onChange={e => setForm(f => ({ ...f, punto_id: e.target.value }))}>
@@ -382,61 +525,8 @@ export default function Ventas() {
                   {puntos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
               </div>
-
-              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10, marginTop: 4 }}>Productos</div>
-              {items.map((item, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'end' }}>
-                  <div>
-                    {i === 0 && <label className="form-label">Producto</label>}
-                    <select className="form-select" value={item.producto_id} onChange={e => updateItem(i, 'producto_id', e.target.value)}>
-                      <option value="">Seleccionar…</option>
-                      {productos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    {i === 0 && <label className="form-label">Cantidad</label>}
-                    <input type="number" className="form-input" value={item.cantidad} onChange={e => updateItem(i, 'cantidad', e.target.value)} min="0" step="0.001" />
-                  </div>
-                  <div>
-                    {i === 0 && <label className="form-label">Precio</label>}
-                    <input type="number" className="form-input" value={item.precio_unitario} onChange={e => updateItem(i, 'precio_unitario', e.target.value)} min="0" step="0.01" />
-                  </div>
-                  <button className="btn btn-ghost btn-sm" onClick={() => removeItem(i)}>✕</button>
-                </div>
-              ))}
-              <button className="btn btn-ghost btn-sm" onClick={addItem} style={{ marginBottom: 14 }}>+ Agregar producto</button>
-
-              <div style={{ background: 'var(--forest-s)', borderRadius: 'var(--r2)', padding: '12px 14px', fontSize: 13 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ color: 'var(--txt2)' }}>Subtotal</span>
-                  <span className="mono">{fmt(subtotal)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <button
-                      type="button"
-                      onClick={() => setForm(f => ({ ...f, con_iva: !f.con_iva }))}
-                      style={{
-                        width: 36, height: 20, borderRadius: 10, border: 'none',
-                        background: form.con_iva ? 'var(--forest)' : 'var(--bdr2)',
-                        cursor: 'pointer', position: 'relative', transition: 'background .15s', flexShrink: 0,
-                      }}
-                    >
-                      <span style={{
-                        position: 'absolute', top: 2, left: form.con_iva ? 18 : 2,
-                        width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .15s',
-                      }} />
-                    </button>
-                    <span style={{ color: form.con_iva ? 'var(--txt)' : 'var(--txt3)' }}>IVA (16%)</span>
-                  </div>
-                  <span className="mono" style={{ color: form.con_iva ? 'var(--txt)' : 'var(--txt3)' }}>{fmt(iva)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid var(--bdr)', paddingTop: 8, color: 'var(--forest)' }}>
-                  <span>Total</span>
-                  <span className="mono">{fmt(total)}</span>
-                </div>
-              </div>
-
+              <FormProductos itemsList={items} onAdd={addItem} onRemove={removeItem} onUpdate={updateItem} />
+              <ResumenIVA sub={subtotal} iv={iva} tot={total} conIva={form.con_iva} onToggle={() => setForm(f => ({ ...f, con_iva: !f.con_iva }))} />
               <div className="form-row" style={{ marginTop: 12 }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Método de pago</label>
@@ -453,12 +543,73 @@ export default function Ventas() {
                   </select>
                 </div>
               </div>
-
               {err && <div style={{ color: 'var(--red)', fontSize: 13, marginTop: 8 }}>{err}</div>}
             </div>
             <div className="modal-foot">
               <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
               <button className="btn btn-amber" onClick={save} disabled={saving}>{saving ? 'Guardando…' : 'Registrar venta'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal editar venta */}
+      {editModal && editingVenta && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditModal(false)}>
+          <div className="modal" style={{ maxWidth: 600 }}>
+            <div className="modal-head">
+              <span className="modal-title">Editar venta — {editingVenta.folio}</span>
+              <button className="modal-close" onClick={() => setEditModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Cliente *</label>
+                  <select className="form-select" value={editForm.cliente_id} onChange={e => setEditForm(f => ({ ...f, cliente_id: e.target.value }))}>
+                    <option value="">Seleccionar…</option>
+                    <option value={PARTICULAR}>— Cliente particular —</option>
+                    {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Fecha</label>
+                  <input type="date" className="form-input" value={editForm.fecha} onChange={e => setEditForm(f => ({ ...f, fecha: e.target.value }))} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">{esParticularE ? 'Nombre del comprador / Notas' : 'Notas'}</label>
+                <input className="form-input" value={editForm.notas} onChange={e => setEditForm(f => ({ ...f, notas: e.target.value }))} placeholder={esParticularE ? 'Ej: Juan García' : 'Opcional'} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Punto de distribución</label>
+                <select className="form-select" value={editForm.punto_id} onChange={e => setEditForm(f => ({ ...f, punto_id: e.target.value }))}>
+                  <option value="">— Sin punto específico —</option>
+                  {puntos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </select>
+              </div>
+              <FormProductos itemsList={editItems} onAdd={addEditItem} onRemove={removeEditItem} onUpdate={updateEditItem} isEdit />
+              <ResumenIVA sub={subtotalE} iv={ivaE} tot={totalE} conIva={editForm.con_iva} onToggle={() => setEditForm(f => ({ ...f, con_iva: !f.con_iva }))} />
+              <div className="form-row" style={{ marginTop: 12 }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Método de pago</label>
+                  <select className="form-select" value={editForm.metodo_pago} onChange={e => setEditForm(f => ({ ...f, metodo_pago: e.target.value }))}>
+                    <option value="efectivo">Efectivo</option>
+                    <option value="transferencia">Transferencia</option>
+                  </select>
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Estado</label>
+                  <select className="form-select" value={editForm.estado} onChange={e => setEditForm(f => ({ ...f, estado: e.target.value }))}>
+                    <option value="pendiente">Pendiente</option>
+                    <option value="pagada">Pagada</option>
+                  </select>
+                </div>
+              </div>
+              {errEdit && <div style={{ color: 'var(--red)', fontSize: 13, marginTop: 8 }}>{errEdit}</div>}
+            </div>
+            <div className="modal-foot">
+              <button className="btn btn-ghost" onClick={() => setEditModal(false)}>Cancelar</button>
+              <button className="btn btn-amber" onClick={saveEdit} disabled={saving}>{saving ? 'Guardando…' : 'Guardar cambios'}</button>
             </div>
           </div>
         </div>
