@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
@@ -6,6 +6,22 @@ const IVA_RATE = 0.16
 const PARTICULAR = '__particular__'
 function fmt(n) { return '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 }) }
 function folio(prefix) { return prefix + '-' + Date.now().toString(36).toUpperCase() }
+
+function SortTh({ col, label, sort, onSort, className }) {
+  const active = sort.col === col
+  return (
+    <th
+      className={className}
+      onClick={() => onSort(col)}
+      style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+    >
+      {label}
+      <span style={{ marginLeft: 4, opacity: active ? 1 : 0.3, fontSize: 10 }}>
+        {active && sort.dir === 'desc' ? '▼' : '▲'}
+      </span>
+    </th>
+  )
+}
 
 function PrintRemision({ venta, items, cliente, notas, conIva, onClose }) {
   const ref = useRef()
@@ -116,10 +132,19 @@ export default function Ventas() {
   const [err, setErr] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // Filtros y orden
+  const [busqueda, setBusqueda] = useState('')
+  const [filtroEstado, setFiltroEstado] = useState('')
+  const [filtroPago, setFiltroPago] = useState('')
+  const [sort, setSort] = useState({ col: 'fecha', dir: 'desc' })
+
+  function handleSort(col) {
+    setSort(s => s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
+  }
+
   const emptyForm = { cliente_id: '', punto_id: '', fecha: new Date().toISOString().slice(0, 10), notas: '', con_iva: true, estado: 'pendiente', metodo_pago: 'efectivo' }
   const [form, setForm] = useState(emptyForm)
   const [items, setItems] = useState([{ producto_id: '', cantidad: 1, precio_unitario: '' }])
-
   const [editForm, setEditForm] = useState(emptyForm)
   const [editItems, setEditItems] = useState([{ producto_id: '', cantidad: 1, precio_unitario: '' }])
   const [editingVenta, setEditingVenta] = useState(null)
@@ -127,7 +152,7 @@ export default function Ventas() {
 
   async function load() {
     const [{ data: v }, { data: c }, { data: p }, { data: pr }] = await Promise.all([
-      supabase.from('ventas').select('*, clientes(nombre)').order('created_at', { ascending: false }).limit(50),
+      supabase.from('ventas').select('*, clientes(nombre)').order('created_at', { ascending: false }).limit(200),
       supabase.from('clientes').select('id, nombre, rfc, direccion').eq('activo', true).order('nombre'),
       supabase.from('puntos_distribucion').select('id, nombre, modelo').eq('activo', true).eq('modelo', 'directa').order('nombre'),
       supabase.from('productos').select('id, nombre, precio_base, unidad').eq('activo', true).order('nombre'),
@@ -141,16 +166,47 @@ export default function Ventas() {
 
   useEffect(() => { load() }, [])
 
+  // Filtrado + ordenamiento
+  const ventasFiltradas = useMemo(() => {
+    let rows = [...ventas]
+
+    if (busqueda) {
+      const q = busqueda.toLowerCase()
+      rows = rows.filter(v =>
+        (v.clientes?.nombre || 'cliente particular').toLowerCase().includes(q) ||
+        (v.notas || '').toLowerCase().includes(q) ||
+        (v.folio || '').toLowerCase().includes(q)
+      )
+    }
+    if (filtroEstado) rows = rows.filter(v => v.estado === filtroEstado)
+    if (filtroPago) rows = rows.filter(v => (v.metodo_pago || 'efectivo') === filtroPago)
+
+    rows.sort((a, b) => {
+      let va, vb
+      switch (sort.col) {
+        case 'cliente': va = (a.clientes?.nombre || 'zz').toLowerCase(); vb = (b.clientes?.nombre || 'zz').toLowerCase(); break
+        case 'fecha':   va = a.fecha; vb = b.fecha; break
+        case 'subtotal':va = a.subtotal; vb = b.subtotal; break
+        case 'total':   va = a.total; vb = b.total; break
+        case 'estado':  va = a.estado; vb = b.estado; break
+        case 'pago':    va = a.metodo_pago || ''; vb = b.metodo_pago || ''; break
+        default:        va = a.fecha; vb = b.fecha
+      }
+      if (va < vb) return sort.dir === 'asc' ? -1 : 1
+      if (va > vb) return sort.dir === 'asc' ? 1 : -1
+      return 0
+    })
+
+    return rows
+  }, [ventas, busqueda, filtroEstado, filtroPago, sort])
+
   function addItem() { setItems(it => [...it, { producto_id: '', cantidad: 1, precio_unitario: '' }]) }
   function removeItem(i) { setItems(it => it.filter((_, idx) => idx !== i)) }
   function updateItem(i, key, val) {
     setItems(it => {
       const next = [...it]
       next[i] = { ...next[i], [key]: val }
-      if (key === 'producto_id') {
-        const p = productos.find(p => p.id === val)
-        if (p) next[i].precio_unitario = p.precio_base
-      }
+      if (key === 'producto_id') { const p = productos.find(p => p.id === val); if (p) next[i].precio_unitario = p.precio_base }
       return next
     })
   }
@@ -161,10 +217,7 @@ export default function Ventas() {
     setEditItems(it => {
       const next = [...it]
       next[i] = { ...next[i], [key]: val }
-      if (key === 'producto_id') {
-        const p = productos.find(p => p.id === val)
-        if (p) next[i].precio_unitario = p.precio_base
-      }
+      if (key === 'producto_id') { const p = productos.find(p => p.id === val); if (p) next[i].precio_unitario = p.precio_base }
       return next
     })
   }
@@ -191,11 +244,7 @@ export default function Ventas() {
       estado: v.estado,
       metodo_pago: v.metodo_pago || 'efectivo',
     })
-    setEditItems((vitems || []).map(i => ({
-      producto_id: i.producto_id,
-      cantidad: i.cantidad,
-      precio_unitario: i.precio_unitario,
-    })))
+    setEditItems((vitems || []).map(i => ({ producto_id: i.producto_id, cantidad: i.cantidad, precio_unitario: i.precio_unitario })))
     setErrEdit('')
     setEditModal(true)
   }
@@ -204,64 +253,17 @@ export default function Ventas() {
     if (!editForm.cliente_id) { setErrEdit('Selecciona un cliente.'); return }
     if (editItems.some(i => !i.producto_id || !i.cantidad || !i.precio_unitario)) { setErrEdit('Completa todos los productos.'); return }
     setSaving(true)
-
     const clienteIdReal = esParticularE ? null : editForm.cliente_id
-
-    await supabase.from('ventas').update({
-      cliente_id: clienteIdReal,
-      punto_id: editForm.punto_id || null,
-      fecha: editForm.fecha,
-      notas: editForm.notas,
-      subtotal: subtotalE,
-      iva: ivaE,
-      total: totalE,
-      estado: editForm.estado,
-      metodo_pago: editForm.metodo_pago,
-    }).eq('id', editingVenta.id)
-
-    // Reemplazar items
+    await supabase.from('ventas').update({ cliente_id: clienteIdReal, punto_id: editForm.punto_id || null, fecha: editForm.fecha, notas: editForm.notas, subtotal: subtotalE, iva: ivaE, total: totalE, estado: editForm.estado, metodo_pago: editForm.metodo_pago }).eq('id', editingVenta.id)
     await supabase.from('venta_items').delete().eq('venta_id', editingVenta.id)
-    await supabase.from('venta_items').insert(editItems.map(i => ({
-      venta_id: editingVenta.id,
-      producto_id: i.producto_id,
-      cantidad: Number(i.cantidad),
-      precio_unitario: Number(i.precio_unitario),
-      subtotal: Number(i.cantidad) * Number(i.precio_unitario),
-    })))
-
-    // Reemplazar movimientos de inventario
+    await supabase.from('venta_items').insert(editItems.map(i => ({ venta_id: editingVenta.id, producto_id: i.producto_id, cantidad: Number(i.cantidad), precio_unitario: Number(i.precio_unitario), subtotal: Number(i.cantidad) * Number(i.precio_unitario) })))
     await supabase.from('movimientos_inventario').delete().eq('referencia_id', editingVenta.id).eq('referencia_tipo', 'venta')
-    await supabase.from('movimientos_inventario').insert(editItems.map(i => ({
-      producto_id: i.producto_id,
-      tipo: 'salida',
-      cantidad: -Number(i.cantidad),
-      concepto: 'Venta directa ' + editingVenta.folio,
-      referencia_id: editingVenta.id,
-      referencia_tipo: 'venta',
-      creado_por: profile?.id,
-    })))
-
-    // Actualizar CxC si hay cliente
+    await supabase.from('movimientos_inventario').insert(editItems.map(i => ({ producto_id: i.producto_id, tipo: 'salida', cantidad: -Number(i.cantidad), concepto: 'Venta directa ' + editingVenta.folio, referencia_id: editingVenta.id, referencia_tipo: 'venta', creado_por: profile?.id })))
     if (!esParticularE && clienteIdReal) {
       const { data: cxc } = await supabase.from('cuentas_por_cobrar').select('id').eq('venta_id', editingVenta.id).single()
-      if (cxc) {
-        await supabase.from('cuentas_por_cobrar').update({
-          cliente_id: clienteIdReal,
-          monto_total: totalE,
-          monto_pagado: editForm.estado === 'pagada' ? totalE : 0,
-          estado: editForm.estado === 'pagada' ? 'pagada' : 'pendiente',
-        }).eq('venta_id', editingVenta.id)
-      } else {
-        await supabase.from('cuentas_por_cobrar').insert({
-          venta_id: editingVenta.id,
-          cliente_id: clienteIdReal,
-          monto_total: totalE,
-          monto_pagado: editForm.estado === 'pagada' ? totalE : 0,
-          estado: editForm.estado === 'pagada' ? 'pagada' : 'pendiente',
-        })
-      }
+      if (cxc) { await supabase.from('cuentas_por_cobrar').update({ cliente_id: clienteIdReal, monto_total: totalE, monto_pagado: editForm.estado === 'pagada' ? totalE : 0, estado: editForm.estado === 'pagada' ? 'pagada' : 'pendiente' }).eq('venta_id', editingVenta.id) }
+      else { await supabase.from('cuentas_por_cobrar').insert({ venta_id: editingVenta.id, cliente_id: clienteIdReal, monto_total: totalE, monto_pagado: editForm.estado === 'pagada' ? totalE : 0, estado: editForm.estado === 'pagada' ? 'pagada' : 'pendiente' }) }
     }
-
     setSaving(false)
     setEditModal(false)
     load()
@@ -271,75 +273,24 @@ export default function Ventas() {
     if (!form.cliente_id) { setErr('Selecciona un cliente o "Cliente particular".'); return }
     if (items.some(i => !i.producto_id || !i.cantidad || !i.precio_unitario)) { setErr('Completa todos los productos.'); return }
     setSaving(true)
-
     const clienteIdReal = esParticular ? null : form.cliente_id
-
-    const { data: venta, error } = await supabase.from('ventas').insert({
-      folio: folio('VD'),
-      tipo: 'directa',
-      cliente_id: clienteIdReal,
-      punto_id: form.punto_id || null,
-      fecha: form.fecha,
-      subtotal,
-      iva,
-      total,
-      notas: form.notas,
-      estado: form.estado,
-      metodo_pago: form.metodo_pago,
-      creado_por: profile?.id,
-    }).select().single()
-
+    const { data: venta, error } = await supabase.from('ventas').insert({ folio: folio('VD'), tipo: 'directa', cliente_id: clienteIdReal, punto_id: form.punto_id || null, fecha: form.fecha, subtotal, iva, total, notas: form.notas, estado: form.estado, metodo_pago: form.metodo_pago, creado_por: profile?.id }).select().single()
     if (error) { setSaving(false); setErr(error.message); return }
-
-    await supabase.from('venta_items').insert(items.map(i => ({
-      venta_id: venta.id,
-      producto_id: i.producto_id,
-      cantidad: Number(i.cantidad),
-      precio_unitario: Number(i.precio_unitario),
-      subtotal: Number(i.cantidad) * Number(i.precio_unitario),
-    })))
-
-    if (!esParticular) {
-      await supabase.from('cuentas_por_cobrar').insert({
-        venta_id: venta.id,
-        cliente_id: clienteIdReal,
-        monto_total: total,
-        monto_pagado: form.estado === 'pagada' ? total : 0,
-        estado: form.estado === 'pagada' ? 'pagada' : 'pendiente',
-      })
-    }
-
-    await supabase.from('movimientos_inventario').insert(items.map(i => ({
-      producto_id: i.producto_id,
-      tipo: 'salida',
-      cantidad: -Number(i.cantidad),
-      concepto: 'Venta directa ' + venta.folio,
-      referencia_id: venta.id,
-      referencia_tipo: 'venta',
-      creado_por: profile?.id,
-    })))
-
-    setSaving(false)
-    setModal(false)
-    setForm(emptyForm)
-    setItems([{ producto_id: '', cantidad: 1, precio_unitario: '' }])
-    load()
+    await supabase.from('venta_items').insert(items.map(i => ({ venta_id: venta.id, producto_id: i.producto_id, cantidad: Number(i.cantidad), precio_unitario: Number(i.precio_unitario), subtotal: Number(i.cantidad) * Number(i.precio_unitario) })))
+    if (!esParticular) { await supabase.from('cuentas_por_cobrar').insert({ venta_id: venta.id, cliente_id: clienteIdReal, monto_total: total, monto_pagado: form.estado === 'pagada' ? total : 0, estado: form.estado === 'pagada' ? 'pagada' : 'pendiente' }) }
+    await supabase.from('movimientos_inventario').insert(items.map(i => ({ producto_id: i.producto_id, tipo: 'salida', cantidad: -Number(i.cantidad), concepto: 'Venta directa ' + venta.folio, referencia_id: venta.id, referencia_tipo: 'venta', creado_por: profile?.id })))
+    setSaving(false); setModal(false); setForm(emptyForm); setItems([{ producto_id: '', cantidad: 1, precio_unitario: '' }]); load()
   }
 
   async function toggleEstado(v) {
     const nuevoEstado = v.estado === 'pagada' ? 'pendiente' : 'pagada'
     await supabase.from('ventas').update({ estado: nuevoEstado }).eq('id', v.id)
-    if (v.cliente_id) {
-      await supabase.from('cuentas_por_cobrar').update({
-        estado: nuevoEstado,
-        monto_pagado: nuevoEstado === 'pagada' ? v.total : 0,
-      }).eq('venta_id', v.id)
-    }
+    if (v.cliente_id) { await supabase.from('cuentas_por_cobrar').update({ estado: nuevoEstado, monto_pagado: nuevoEstado === 'pagada' ? v.total : 0 }).eq('venta_id', v.id) }
     load()
   }
 
   async function eliminar(v) {
-    if (!window.confirm(`¿Eliminar la venta ${v.folio}?\n\nEsta acción no se puede deshacer. Se eliminarán también los movimientos de inventario y la cuenta por cobrar asociada.`)) return
+    if (!window.confirm(`¿Eliminar la venta ${v.folio}?\n\nEsta acción no se puede deshacer.`)) return
     await supabase.from('cuentas_por_cobrar').delete().eq('venta_id', v.id)
     await supabase.from('movimientos_inventario').delete().eq('referencia_id', v.id).eq('referencia_tipo', 'venta')
     await supabase.from('venta_items').delete().eq('venta_id', v.id)
@@ -350,63 +301,46 @@ export default function Ventas() {
   async function openPrint(v) {
     const { data: vitems } = await supabase.from('venta_items').select('*, productos(nombre, unidad)').eq('venta_id', v.id)
     let cliente = null
-    if (v.cliente_id) {
-      const { data } = await supabase.from('clientes').select('*').eq('id', v.cliente_id).single()
-      cliente = data
-    }
-    const mappedItems = (vitems || []).map(i => ({
-      producto_nombre: i.productos?.nombre,
-      unidad: i.productos?.unidad,
-      cantidad: i.cantidad,
-      precio_unitario: i.precio_unitario,
-      subtotal: i.subtotal,
-    }))
-    setPrintData({ venta: v, items: mappedItems, cliente, notas: v.notas, conIva: v.iva > 0 })
+    if (v.cliente_id) { const { data } = await supabase.from('clientes').select('*').eq('id', v.cliente_id).single(); cliente = data }
+    setPrintData({ venta: v, items: (vitems || []).map(i => ({ producto_nombre: i.productos?.nombre, unidad: i.productos?.unidad, cantidad: i.cantidad, precio_unitario: i.precio_unitario, subtotal: i.subtotal })), cliente, notas: v.notas, conIva: v.iva > 0 })
   }
 
-  function FormProductos({ itemsList, onAdd, onRemove, onUpdate, isEdit }) {
-    return (
-      <>
-        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10, marginTop: 4 }}>Productos</div>
-        {itemsList.map((item, i) => (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'end' }}>
-            <div>
-              {i === 0 && <label className="form-label">Producto</label>}
-              <select className="form-select" value={item.producto_id} onChange={e => onUpdate(i, 'producto_id', e.target.value)}>
-                <option value="">Seleccionar…</option>
-                {productos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-              </select>
-            </div>
-            <div>
-              {i === 0 && <label className="form-label">Cantidad</label>}
-              <input type="number" className="form-input" value={item.cantidad} onChange={e => onUpdate(i, 'cantidad', e.target.value)} min="0" step="0.001" />
-            </div>
-            <div>
-              {i === 0 && <label className="form-label">Precio</label>}
-              <input type="number" className="form-input" value={item.precio_unitario} onChange={e => onUpdate(i, 'precio_unitario', e.target.value)} min="0" step="0.01" />
-            </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => onRemove(i)}>✕</button>
+  function ProductosForm({ its, onAdd, onRemove, onUpd }) {
+    return <>
+      <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10, marginTop: 4 }}>Productos</div>
+      {its.map((item, i) => (
+        <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'end' }}>
+          <div>
+            {i === 0 && <label className="form-label">Producto</label>}
+            <select className="form-select" value={item.producto_id} onChange={e => onUpd(i, 'producto_id', e.target.value)}>
+              <option value="">Seleccionar…</option>
+              {productos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            </select>
           </div>
-        ))}
-        <button className="btn btn-ghost btn-sm" onClick={onAdd} style={{ marginBottom: 14 }}>+ Agregar producto</button>
-      </>
-    )
+          <div>
+            {i === 0 && <label className="form-label">Cantidad</label>}
+            <input type="number" className="form-input" value={item.cantidad} onChange={e => onUpd(i, 'cantidad', e.target.value)} min="0" step="0.001" />
+          </div>
+          <div>
+            {i === 0 && <label className="form-label">Precio</label>}
+            <input type="number" className="form-input" value={item.precio_unitario} onChange={e => onUpd(i, 'precio_unitario', e.target.value)} min="0" step="0.01" />
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={() => onRemove(i)}>✕</button>
+        </div>
+      ))}
+      <button className="btn btn-ghost btn-sm" onClick={onAdd} style={{ marginBottom: 14 }}>+ Agregar producto</button>
+    </>
   }
 
-  function ResumenIVA({ sub, iv, tot, conIva, onToggle }) {
+  function IVAResumen({ sub, iv, tot, conIva, onToggle }) {
     return (
       <div style={{ background: 'var(--forest-s)', borderRadius: 'var(--r2)', padding: '12px 14px', fontSize: 13 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ color: 'var(--txt2)' }}>Subtotal</span>
-          <span className="mono">{fmt(sub)}</span>
+          <span style={{ color: 'var(--txt2)' }}>Subtotal</span><span className="mono">{fmt(sub)}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button type="button" onClick={onToggle} style={{
-              width: 36, height: 20, borderRadius: 10, border: 'none',
-              background: conIva ? 'var(--forest)' : 'var(--bdr2)',
-              cursor: 'pointer', position: 'relative', transition: 'background .15s', flexShrink: 0,
-            }}>
+            <button type="button" onClick={onToggle} style={{ width: 36, height: 20, borderRadius: 10, border: 'none', background: conIva ? 'var(--forest)' : 'var(--bdr2)', cursor: 'pointer', position: 'relative', transition: 'background .15s', flexShrink: 0 }}>
               <span style={{ position: 'absolute', top: 2, left: conIva ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .15s' }} />
             </button>
             <span style={{ color: conIva ? 'var(--txt)' : 'var(--txt3)' }}>IVA (16%)</span>
@@ -414,8 +348,58 @@ export default function Ventas() {
           <span className="mono" style={{ color: conIva ? 'var(--txt)' : 'var(--txt3)' }}>{fmt(iv)}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid var(--bdr)', paddingTop: 8, color: 'var(--forest)' }}>
-          <span>Total</span>
-          <span className="mono">{fmt(tot)}</span>
+          <span>Total</span><span className="mono">{fmt(tot)}</span>
+        </div>
+      </div>
+    )
+  }
+
+  function ModalCampos({ f, setF, esP }) {
+    return <>
+      <div className="form-row">
+        <div className="form-group">
+          <label className="form-label">Cliente *</label>
+          <select className="form-select" value={f.cliente_id} onChange={e => setF(x => ({ ...x, cliente_id: e.target.value }))}>
+            <option value="">Seleccionar…</option>
+            <option value={PARTICULAR}>— Cliente particular —</option>
+            {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Fecha</label>
+          <input type="date" className="form-input" value={f.fecha} onChange={e => setF(x => ({ ...x, fecha: e.target.value }))} />
+        </div>
+      </div>
+      <div className="form-group">
+        <label className="form-label">{esP ? 'Nombre del comprador / Notas' : 'Notas'}</label>
+        <input className="form-input" value={f.notas} onChange={e => setF(x => ({ ...x, notas: e.target.value }))} placeholder={esP ? 'Ej: Juan García' : 'Opcional'} />
+      </div>
+      <div className="form-group">
+        <label className="form-label">Punto de distribución</label>
+        <select className="form-select" value={f.punto_id} onChange={e => setF(x => ({ ...x, punto_id: e.target.value }))}>
+          <option value="">— Sin punto específico —</option>
+          {puntos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+        </select>
+      </div>
+    </>
+  }
+
+  function PagoEstado({ f, setF }) {
+    return (
+      <div className="form-row" style={{ marginTop: 12 }}>
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label className="form-label">Método de pago</label>
+          <select className="form-select" value={f.metodo_pago} onChange={e => setF(x => ({ ...x, metodo_pago: e.target.value }))}>
+            <option value="efectivo">Efectivo</option>
+            <option value="transferencia">Transferencia</option>
+          </select>
+        </div>
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label className="form-label">Estado</label>
+          <select className="form-select" value={f.estado} onChange={e => setF(x => ({ ...x, estado: e.target.value }))}>
+            <option value="pendiente">Pendiente</option>
+            <option value="pagada">Pagada</option>
+          </select>
         </div>
       </div>
     )
@@ -430,32 +414,59 @@ export default function Ventas() {
         <button className="btn btn-amber" onClick={() => { setErr(''); setModal(true) }}>+ Nueva venta</button>
       </div>
 
+      {/* Barra de filtros */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input
+          className="form-input"
+          style={{ maxWidth: 220 }}
+          placeholder="Buscar cliente, folio, notas…"
+          value={busqueda}
+          onChange={e => setBusqueda(e.target.value)}
+        />
+        <select className="form-select" style={{ maxWidth: 150 }} value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
+          <option value="">Todos los estados</option>
+          <option value="pendiente">Pendiente</option>
+          <option value="pagada">Pagada</option>
+        </select>
+        <select className="form-select" style={{ maxWidth: 170 }} value={filtroPago} onChange={e => setFiltroPago(e.target.value)}>
+          <option value="">Todos los pagos</option>
+          <option value="efectivo">Efectivo</option>
+          <option value="transferencia">Transferencia</option>
+        </select>
+        {(busqueda || filtroEstado || filtroPago) && (
+          <button className="btn btn-ghost btn-sm" onClick={() => { setBusqueda(''); setFiltroEstado(''); setFiltroPago('') }}>
+            Limpiar filtros
+          </button>
+        )}
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--txt3)' }}>
+          {ventasFiltradas.length} {ventasFiltradas.length === 1 ? 'venta' : 'ventas'}
+        </span>
+      </div>
+
       <div className="card">
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Folio</th>
-                <th>Cliente</th>
+                <SortTh col="cliente" label="Cliente" sort={sort} onSort={handleSort} />
                 <th>Notas</th>
-                <th>Fecha</th>
-                <th className="txt-right">Subtotal</th>
+                <SortTh col="fecha" label="Fecha" sort={sort} onSort={handleSort} />
+                <SortTh col="subtotal" label="Subtotal" sort={sort} onSort={handleSort} className="txt-right" />
                 <th className="txt-right">IVA</th>
-                <th className="txt-right">Total</th>
-                <th>Pago</th>
-                <th>Estado</th>
+                <SortTh col="total" label="Total" sort={sort} onSort={handleSort} className="txt-right" />
+                <SortTh col="pago" label="Pago" sort={sort} onSort={handleSort} />
+                <SortTh col="estado" label="Estado" sort={sort} onSort={handleSort} />
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {ventas.length === 0 && <tr><td colSpan={10} className="empty">Sin ventas</td></tr>}
-              {ventas.map(v => (
+              {ventasFiltradas.length === 0 && <tr><td colSpan={10} className="empty">Sin ventas</td></tr>}
+              {ventasFiltradas.map(v => (
                 <tr key={v.id}>
                   <td className="mono">{v.folio}</td>
                   <td>{v.clientes?.nombre || <span style={{ color: 'var(--txt3)', fontSize: 12 }}>Cliente particular</span>}</td>
-                  <td style={{ fontSize: 12, color: 'var(--txt2)', maxWidth: 180 }}>
-                    {v.notas || <span style={{ color: 'var(--txt3)' }}>—</span>}
-                  </td>
+                  <td style={{ fontSize: 12, color: 'var(--txt2)', maxWidth: 180 }}>{v.notas || <span style={{ color: 'var(--txt3)' }}>—</span>}</td>
                   <td>{v.fecha}</td>
                   <td className="txt-right mono">{fmt(v.subtotal)}</td>
                   <td className="txt-right mono">{fmt(v.iva)}</td>
@@ -466,13 +477,7 @@ export default function Ventas() {
                       : <span className="badge b-neu">Efectivo</span>}
                   </td>
                   <td>
-                    <button onClick={() => toggleEstado(v)} style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      padding: '3px 10px', borderRadius: 100, border: 'none', cursor: 'pointer',
-                      fontSize: 12, fontWeight: 500, fontFamily: 'inherit', transition: 'background .15s',
-                      background: v.estado === 'pagada' ? 'var(--ok-s)' : 'var(--amber-s)',
-                      color: v.estado === 'pagada' ? 'var(--ok-t)' : 'var(--amber-t)',
-                    }} title="Clic para cambiar estado">
+                    <button onClick={() => toggleEstado(v)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 100, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', transition: 'background .15s', background: v.estado === 'pagada' ? 'var(--ok-s)' : 'var(--amber-s)', color: v.estado === 'pagada' ? 'var(--ok-t)' : 'var(--amber-t)' }} title="Clic para cambiar estado">
                       <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: v.estado === 'pagada' ? 'var(--ok)' : 'var(--amber)' }} />
                       {v.estado === 'pagada' ? 'Pagada' : 'Pendiente'}
                     </button>
@@ -500,49 +505,10 @@ export default function Ventas() {
               <button className="modal-close" onClick={() => setModal(false)}>×</button>
             </div>
             <div className="modal-body">
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Cliente *</label>
-                  <select className="form-select" value={form.cliente_id} onChange={e => setForm(f => ({ ...f, cliente_id: e.target.value }))}>
-                    <option value="">Seleccionar…</option>
-                    <option value={PARTICULAR}>— Cliente particular —</option>
-                    {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Fecha</label>
-                  <input type="date" className="form-input" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">{esParticular ? 'Nombre del comprador / Notas' : 'Notas'}</label>
-                <input className="form-input" value={form.notas} onChange={e => setForm(f => ({ ...f, notas: e.target.value }))} placeholder={esParticular ? 'Ej: Juan García' : 'Opcional'} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Punto de distribución</label>
-                <select className="form-select" value={form.punto_id} onChange={e => setForm(f => ({ ...f, punto_id: e.target.value }))}>
-                  <option value="">— Sin punto específico —</option>
-                  {puntos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </select>
-              </div>
-              <FormProductos itemsList={items} onAdd={addItem} onRemove={removeItem} onUpdate={updateItem} />
-              <ResumenIVA sub={subtotal} iv={iva} tot={total} conIva={form.con_iva} onToggle={() => setForm(f => ({ ...f, con_iva: !f.con_iva }))} />
-              <div className="form-row" style={{ marginTop: 12 }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Método de pago</label>
-                  <select className="form-select" value={form.metodo_pago} onChange={e => setForm(f => ({ ...f, metodo_pago: e.target.value }))}>
-                    <option value="efectivo">Efectivo</option>
-                    <option value="transferencia">Transferencia</option>
-                  </select>
-                </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Estado</label>
-                  <select className="form-select" value={form.estado} onChange={e => setForm(f => ({ ...f, estado: e.target.value }))}>
-                    <option value="pendiente">Pendiente</option>
-                    <option value="pagada">Pagada</option>
-                  </select>
-                </div>
-              </div>
+              <ModalCampos f={form} setF={setForm} esP={esParticular} />
+              <ProductosForm its={items} onAdd={addItem} onRemove={removeItem} onUpd={updateItem} />
+              <IVAResumen sub={subtotal} iv={iva} tot={total} conIva={form.con_iva} onToggle={() => setForm(f => ({ ...f, con_iva: !f.con_iva }))} />
+              <PagoEstado f={form} setF={setForm} />
               {err && <div style={{ color: 'var(--red)', fontSize: 13, marginTop: 8 }}>{err}</div>}
             </div>
             <div className="modal-foot">
@@ -562,49 +528,10 @@ export default function Ventas() {
               <button className="modal-close" onClick={() => setEditModal(false)}>×</button>
             </div>
             <div className="modal-body">
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Cliente *</label>
-                  <select className="form-select" value={editForm.cliente_id} onChange={e => setEditForm(f => ({ ...f, cliente_id: e.target.value }))}>
-                    <option value="">Seleccionar…</option>
-                    <option value={PARTICULAR}>— Cliente particular —</option>
-                    {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Fecha</label>
-                  <input type="date" className="form-input" value={editForm.fecha} onChange={e => setEditForm(f => ({ ...f, fecha: e.target.value }))} />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">{esParticularE ? 'Nombre del comprador / Notas' : 'Notas'}</label>
-                <input className="form-input" value={editForm.notas} onChange={e => setEditForm(f => ({ ...f, notas: e.target.value }))} placeholder={esParticularE ? 'Ej: Juan García' : 'Opcional'} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Punto de distribución</label>
-                <select className="form-select" value={editForm.punto_id} onChange={e => setEditForm(f => ({ ...f, punto_id: e.target.value }))}>
-                  <option value="">— Sin punto específico —</option>
-                  {puntos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </select>
-              </div>
-              <FormProductos itemsList={editItems} onAdd={addEditItem} onRemove={removeEditItem} onUpdate={updateEditItem} isEdit />
-              <ResumenIVA sub={subtotalE} iv={ivaE} tot={totalE} conIva={editForm.con_iva} onToggle={() => setEditForm(f => ({ ...f, con_iva: !f.con_iva }))} />
-              <div className="form-row" style={{ marginTop: 12 }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Método de pago</label>
-                  <select className="form-select" value={editForm.metodo_pago} onChange={e => setEditForm(f => ({ ...f, metodo_pago: e.target.value }))}>
-                    <option value="efectivo">Efectivo</option>
-                    <option value="transferencia">Transferencia</option>
-                  </select>
-                </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Estado</label>
-                  <select className="form-select" value={editForm.estado} onChange={e => setEditForm(f => ({ ...f, estado: e.target.value }))}>
-                    <option value="pendiente">Pendiente</option>
-                    <option value="pagada">Pagada</option>
-                  </select>
-                </div>
-              </div>
+              <ModalCampos f={editForm} setF={setEditForm} esP={esParticularE} />
+              <ProductosForm its={editItems} onAdd={addEditItem} onRemove={removeEditItem} onUpd={updateEditItem} />
+              <IVAResumen sub={subtotalE} iv={ivaE} tot={totalE} conIva={editForm.con_iva} onToggle={() => setEditForm(f => ({ ...f, con_iva: !f.con_iva }))} />
+              <PagoEstado f={editForm} setF={setEditForm} />
               {errEdit && <div style={{ color: 'var(--red)', fontSize: 13, marginTop: 8 }}>{errEdit}</div>}
             </div>
             <div className="modal-foot">
@@ -616,14 +543,7 @@ export default function Ventas() {
       )}
 
       {printData && (
-        <PrintRemision
-          venta={printData.venta}
-          items={printData.items}
-          cliente={printData.cliente}
-          notas={printData.notas}
-          conIva={printData.conIva}
-          onClose={() => setPrintData(null)}
-        />
+        <PrintRemision venta={printData.venta} items={printData.items} cliente={printData.cliente} notas={printData.notas} conIva={printData.conIva} onClose={() => setPrintData(null)} />
       )}
     </div>
   )
