@@ -8,21 +8,17 @@ function fmt(n) { return '$' + Number(n || 0).toLocaleString('es-MX', { minimumF
 function folio(prefix) { return prefix + '-' + Date.now().toString(36).toUpperCase() }
 
 const ESTADOS = [
-  { value: 'pendiente',   label: 'Pendiente',   bg: 'var(--amber-s)', color: 'var(--amber-t)', dot: 'var(--amber)' },
-  { value: 'pagada',      label: 'Pagada',      bg: 'var(--ok-s)',    color: 'var(--ok-t)',    dot: 'var(--ok)' },
-  { value: 'degustacion', label: 'Degustación', bg: 'var(--info-s)',  color: 'var(--info-t)',  dot: 'var(--info)' },
-  { value: 'regalado',    label: 'Regalado',    bg: '#f3e8ff',        color: '#7c3aed',        dot: '#a855f7' },
+  { value: 'pendiente',   label: 'Pendiente',   bg: 'var(--amber-s)', color: 'var(--amber-t)' },
+  { value: 'pagada',      label: 'Pagada',      bg: 'var(--ok-s)',    color: 'var(--ok-t)' },
+  { value: 'degustacion', label: 'Degustación', bg: 'var(--info-s)',  color: 'var(--info-t)' },
+  { value: 'regalado',    label: 'Regalado',    bg: '#f3e8ff',        color: '#7c3aed' },
 ]
 function estadoMeta(e) { return ESTADOS.find(x => x.value === e) || ESTADOS[0] }
 
 function SortTh({ col, label, sort, onSort, className }) {
   const active = sort.col === col
   return (
-    <th
-      className={className}
-      onClick={() => onSort(col)}
-      style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
-    >
+    <th className={className} onClick={() => onSort(col)} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
       {label}
       <span style={{ marginLeft: 4, opacity: active ? 1 : 0.3, fontSize: 10 }}>
         {active && sort.dir === 'desc' ? '▼' : '▲'}
@@ -37,24 +33,113 @@ function EstadoSelect({ v, onChange }) {
     <select
       value={v.estado}
       onChange={e => onChange(v, e.target.value)}
-      style={{
-        appearance: 'none',
-        WebkitAppearance: 'none',
-        border: 'none',
-        borderRadius: 100,
-        padding: '3px 10px',
-        fontSize: 12,
-        fontWeight: 500,
-        fontFamily: 'inherit',
-        cursor: 'pointer',
-        background: meta.bg,
-        color: meta.color,
-        outline: 'none',
-      }}
+      style={{ appearance: 'none', WebkitAppearance: 'none', border: 'none', borderRadius: 100, padding: '3px 10px', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer', background: meta.bg, color: meta.color, outline: 'none' }}
     >
       {ESTADOS.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
     </select>
   )
+}
+
+function IVAResumen({ sub, iv, tot, conIva, onToggle }) {
+  return (
+    <div style={{ background: 'var(--forest-s)', borderRadius: 'var(--r2)', padding: '12px 14px', fontSize: 13 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span style={{ color: 'var(--txt2)' }}>Subtotal</span><span className="mono">{fmt(sub)}</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button type="button" onClick={onToggle} style={{ width: 36, height: 20, borderRadius: 10, border: 'none', background: conIva ? 'var(--forest)' : 'var(--bdr2)', cursor: 'pointer', position: 'relative', transition: 'background .15s', flexShrink: 0 }}>
+            <span style={{ position: 'absolute', top: 2, left: conIva ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .15s' }} />
+          </button>
+          <span style={{ color: conIva ? 'var(--txt)' : 'var(--txt3)' }}>IVA (16%)</span>
+        </div>
+        <span className="mono" style={{ color: conIva ? 'var(--txt)' : 'var(--txt3)' }}>{fmt(iv)}</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid var(--bdr)', paddingTop: 8, color: 'var(--forest)' }}>
+        <span>Total</span><span className="mono">{fmt(tot)}</span>
+      </div>
+    </div>
+  )
+}
+
+function PagoEstado({ f, setF }) {
+  return (
+    <div className="form-row" style={{ marginTop: 12 }}>
+      <div className="form-group" style={{ marginBottom: 0 }}>
+        <label className="form-label">Método de pago</label>
+        <select className="form-select" value={f.metodo_pago} onChange={e => setF(x => ({ ...x, metodo_pago: e.target.value }))}>
+          <option value="efectivo">Efectivo</option>
+          <option value="transferencia">Transferencia</option>
+        </select>
+      </div>
+      <div className="form-group" style={{ marginBottom: 0 }}>
+        <label className="form-label">Estado</label>
+        <select className="form-select" value={f.estado} onChange={e => setF(x => ({ ...x, estado: e.target.value }))}>
+          <option value="pendiente">Pendiente</option>
+          <option value="pagada">Pagada</option>
+          <option value="degustacion">Degustación</option>
+          <option value="regalado">Regalado</option>
+        </select>
+      </div>
+    </div>
+  )
+}
+
+function ModalCampos({ f, setF, esP, clientes, puntos }) {
+  return <>
+    <div className="form-row">
+      <div className="form-group">
+        <label className="form-label">Cliente *</label>
+        <select className="form-select" value={f.cliente_id} onChange={e => setF(x => ({ ...x, cliente_id: e.target.value }))}>
+          <option value="">Seleccionar…</option>
+          <option value={PARTICULAR}>— Cliente particular —</option>
+          {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+        </select>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Fecha</label>
+        <input type="date" className="form-input" value={f.fecha} onChange={e => setF(x => ({ ...x, fecha: e.target.value }))} />
+      </div>
+    </div>
+    <div className="form-group">
+      <label className="form-label">{esP ? 'Nombre del comprador / Notas' : 'Notas'}</label>
+      <input className="form-input" value={f.notas} onChange={e => setF(x => ({ ...x, notas: e.target.value }))} placeholder={esP ? 'Ej: Juan García' : 'Opcional'} />
+    </div>
+    <div className="form-group">
+      <label className="form-label">Punto de distribución</label>
+      <select className="form-select" value={f.punto_id} onChange={e => setF(x => ({ ...x, punto_id: e.target.value }))}>
+        <option value="">— Sin punto específico —</option>
+        {puntos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+      </select>
+    </div>
+  </>
+}
+
+function ProductosForm({ its, onAdd, onRemove, onUpd, productos }) {
+  return <>
+    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10, marginTop: 4 }}>Productos</div>
+    {its.map((item, i) => (
+      <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'end' }}>
+        <div>
+          {i === 0 && <label className="form-label">Producto</label>}
+          <select className="form-select" value={item.producto_id} onChange={e => onUpd(i, 'producto_id', e.target.value)}>
+            <option value="">Seleccionar…</option>
+            {productos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          </select>
+        </div>
+        <div>
+          {i === 0 && <label className="form-label">Cantidad</label>}
+          <input type="number" className="form-input" value={item.cantidad} onChange={e => onUpd(i, 'cantidad', e.target.value)} min="0" step="0.001" />
+        </div>
+        <div>
+          {i === 0 && <label className="form-label">Precio</label>}
+          <input type="number" className="form-input" value={item.precio_unitario} onChange={e => onUpd(i, 'precio_unitario', e.target.value)} min="0" step="0.01" />
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={() => onRemove(i)}>✕</button>
+      </div>
+    ))}
+    <button className="btn btn-ghost btn-sm" onClick={onAdd} style={{ marginBottom: 14 }}>+ Agregar producto</button>
+  </>
 }
 
 function PrintRemision({ venta, items, cliente, notas, conIva, onClose }) {
@@ -72,11 +157,9 @@ function PrintRemision({ venta, items, cliente, notas, conIva, onClose }) {
     w.document.close()
     w.print()
   }
-
   const sub = items.reduce((a, i) => a + i.subtotal, 0)
   const iva = conIva ? sub * IVA_RATE : 0
   const total = sub + iva
-
   return (
     <div className="modal-overlay">
       <div className="modal" style={{ maxWidth: 640 }}>
@@ -215,7 +298,6 @@ export default function Ventas() {
     }
     if (filtroEstado) rows = rows.filter(v => v.estado === filtroEstado)
     if (filtroPago)   rows = rows.filter(v => (v.metodo_pago || 'efectivo') === filtroPago)
-
     rows.sort((a, b) => {
       let va, vb
       switch (sort.col) {
@@ -270,11 +352,8 @@ export default function Ventas() {
     setEditForm({
       cliente_id: v.cliente_id || PARTICULAR,
       punto_id: v.punto_id || '',
-      fecha: v.fecha,
-      notas: v.notas || '',
-      con_iva: v.iva > 0,
-      estado: v.estado,
-      metodo_pago: v.metodo_pago || 'efectivo',
+      fecha: v.fecha, notas: v.notas || '',
+      con_iva: v.iva > 0, estado: v.estado, metodo_pago: v.metodo_pago || 'efectivo',
     })
     setEditItems((vitems || []).map(i => ({ producto_id: i.producto_id, cantidad: i.cantidad, precio_unitario: i.precio_unitario })))
     setErrEdit('')
@@ -298,10 +377,8 @@ export default function Ventas() {
 
     await supabase.from('venta_items').delete().eq('venta_id', editingVenta.id)
     await supabase.from('venta_items').insert(editItems.map(i => ({
-      venta_id: editingVenta.id,
-      producto_id: i.producto_id,
-      cantidad: Number(i.cantidad),
-      precio_unitario: Number(i.precio_unitario),
+      venta_id: editingVenta.id, producto_id: i.producto_id,
+      cantidad: Number(i.cantidad), precio_unitario: Number(i.precio_unitario),
       subtotal: Number(i.cantidad) * Number(i.precio_unitario),
     })))
     await supabase.from('movimientos_inventario').delete().eq('referencia_id', editingVenta.id).eq('referencia_tipo', 'venta')
@@ -319,7 +396,6 @@ export default function Ventas() {
         await supabase.from('cuentas_por_cobrar').insert({ venta_id: editingVenta.id, cliente_id: clienteIdReal, monto_total: totalE, monto_pagado: cxcPagado, estado: cxcEstado })
       }
     }
-
     setSaving(false); setEditModal(false); load()
   }
 
@@ -328,21 +404,17 @@ export default function Ventas() {
     if (items.some(i => !i.producto_id || !i.cantidad || !i.precio_unitario)) { setErr('Completa todos los productos.'); return }
     setSaving(true)
     const clienteIdReal = esParticular ? null : form.cliente_id
-
     const { data: venta, error } = await supabase.from('ventas').insert({
       folio: folio('VD'), tipo: 'directa', cliente_id: clienteIdReal,
       punto_id: form.punto_id || null, fecha: form.fecha, subtotal, iva, total,
       notas: form.notas, estado: form.estado, metodo_pago: form.metodo_pago, creado_por: profile?.id,
     }).select().single()
-
     if (error) { setSaving(false); setErr(error.message); return }
-
     await supabase.from('venta_items').insert(items.map(i => ({
       venta_id: venta.id, producto_id: i.producto_id,
       cantidad: Number(i.cantidad), precio_unitario: Number(i.precio_unitario),
       subtotal: Number(i.cantidad) * Number(i.precio_unitario),
     })))
-
     if (!esParticular) {
       await supabase.from('cuentas_por_cobrar').insert({
         venta_id: venta.id, cliente_id: clienteIdReal, monto_total: total,
@@ -350,13 +422,11 @@ export default function Ventas() {
         estado: form.estado === 'pagada' ? 'pagada' : 'pendiente',
       })
     }
-
     await supabase.from('movimientos_inventario').insert(items.map(i => ({
       producto_id: i.producto_id, tipo: 'salida', cantidad: -Number(i.cantidad),
       concepto: 'Venta directa ' + venta.folio,
       referencia_id: venta.id, referencia_tipo: 'venta', creado_por: profile?.id,
     })))
-
     setSaving(false); setModal(false)
     setForm(emptyForm); setItems([{ producto_id: '', cantidad: 1, precio_unitario: '' }])
     load()
@@ -393,108 +463,6 @@ export default function Ventas() {
     })
   }
 
-  function IVAResumen({ sub, iv, tot, conIva, onToggle }) {
-    return (
-      <div style={{ background: 'var(--forest-s)', borderRadius: 'var(--r2)', padding: '12px 14px', fontSize: 13 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ color: 'var(--txt2)' }}>Subtotal</span><span className="mono">{fmt(sub)}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button type="button" onClick={onToggle} style={{ width: 36, height: 20, borderRadius: 10, border: 'none', background: conIva ? 'var(--forest)' : 'var(--bdr2)', cursor: 'pointer', position: 'relative', transition: 'background .15s', flexShrink: 0 }}>
-              <span style={{ position: 'absolute', top: 2, left: conIva ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .15s' }} />
-            </button>
-            <span style={{ color: conIva ? 'var(--txt)' : 'var(--txt3)' }}>IVA (16%)</span>
-          </div>
-          <span className="mono" style={{ color: conIva ? 'var(--txt)' : 'var(--txt3)' }}>{fmt(iv)}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid var(--bdr)', paddingTop: 8, color: 'var(--forest)' }}>
-          <span>Total</span><span className="mono">{fmt(tot)}</span>
-        </div>
-      </div>
-    )
-  }
-
-  function ProductosForm({ its, onAdd, onRemove, onUpd }) {
-    return <>
-      <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10, marginTop: 4 }}>Productos</div>
-      {its.map((item, i) => (
-        <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'end' }}>
-          <div>
-            {i === 0 && <label className="form-label">Producto</label>}
-            <select className="form-select" value={item.producto_id} onChange={e => onUpd(i, 'producto_id', e.target.value)}>
-              <option value="">Seleccionar…</option>
-              {productos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-            </select>
-          </div>
-          <div>
-            {i === 0 && <label className="form-label">Cantidad</label>}
-            <input type="number" className="form-input" value={item.cantidad} onChange={e => onUpd(i, 'cantidad', e.target.value)} min="0" step="0.001" />
-          </div>
-          <div>
-            {i === 0 && <label className="form-label">Precio</label>}
-            <input type="number" className="form-input" value={item.precio_unitario} onChange={e => onUpd(i, 'precio_unitario', e.target.value)} min="0" step="0.01" />
-          </div>
-          <button className="btn btn-ghost btn-sm" onClick={() => onRemove(i)}>✕</button>
-        </div>
-      ))}
-      <button className="btn btn-ghost btn-sm" onClick={onAdd} style={{ marginBottom: 14 }}>+ Agregar producto</button>
-    </>
-  }
-
-  function ModalCampos({ f, setF, esP }) {
-    return <>
-      <div className="form-row">
-        <div className="form-group">
-          <label className="form-label">Cliente *</label>
-          <select className="form-select" value={f.cliente_id} onChange={e => setF(x => ({ ...x, cliente_id: e.target.value }))}>
-            <option value="">Seleccionar…</option>
-            <option value={PARTICULAR}>— Cliente particular —</option>
-            {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-          </select>
-        </div>
-        <div className="form-group">
-          <label className="form-label">Fecha</label>
-          <input type="date" className="form-input" value={f.fecha} onChange={e => setF(x => ({ ...x, fecha: e.target.value }))} />
-        </div>
-      </div>
-      <div className="form-group">
-        <label className="form-label">{esP ? 'Nombre del comprador / Notas' : 'Notas'}</label>
-        <input className="form-input" value={f.notas} onChange={e => setF(x => ({ ...x, notas: e.target.value }))} placeholder={esP ? 'Ej: Juan García' : 'Opcional'} />
-      </div>
-      <div className="form-group">
-        <label className="form-label">Punto de distribución</label>
-        <select className="form-select" value={f.punto_id} onChange={e => setF(x => ({ ...x, punto_id: e.target.value }))}>
-          <option value="">— Sin punto específico —</option>
-          {puntos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-        </select>
-      </div>
-    </>
-  }
-
-  function PagoEstado({ f, setF }) {
-    return (
-      <div className="form-row" style={{ marginTop: 12 }}>
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <label className="form-label">Método de pago</label>
-          <select className="form-select" value={f.metodo_pago} onChange={e => setF(x => ({ ...x, metodo_pago: e.target.value }))}>
-            <option value="efectivo">Efectivo</option>
-            <option value="transferencia">Transferencia</option>
-          </select>
-        </div>
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <label className="form-label">Estado</label>
-          <select className="form-select" value={f.estado} onChange={e => setF(x => ({ ...x, estado: e.target.value }))}>
-            <option value="pendiente">Pendiente</option>
-            <option value="pagada">Pagada</option>
-            <option value="degustacion">Degustación</option>
-            <option value="regalado">Regalado</option>
-          </select>
-        </div>
-      </div>
-    )
-  }
-
   if (loading) return <div className="empty">Cargando…</div>
 
   return (
@@ -505,13 +473,7 @@ export default function Ventas() {
       </div>
 
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input
-          className="form-input"
-          style={{ maxWidth: 220 }}
-          placeholder="Buscar cliente, folio, notas…"
-          value={busqueda}
-          onChange={e => setBusqueda(e.target.value)}
-        />
+        <input className="form-input" style={{ maxWidth: 220 }} placeholder="Buscar cliente, folio, notas…" value={busqueda} onChange={e => setBusqueda(e.target.value)} />
         <select className="form-select" style={{ maxWidth: 160 }} value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
           <option value="">Todos los estados</option>
           <option value="pendiente">Pendiente</option>
@@ -525,9 +487,7 @@ export default function Ventas() {
           <option value="transferencia">Transferencia</option>
         </select>
         {(busqueda || filtroEstado || filtroPago) && (
-          <button className="btn btn-ghost btn-sm" onClick={() => { setBusqueda(''); setFiltroEstado(''); setFiltroPago('') }}>
-            Limpiar filtros
-          </button>
+          <button className="btn btn-ghost btn-sm" onClick={() => { setBusqueda(''); setFiltroEstado(''); setFiltroPago('') }}>Limpiar filtros</button>
         )}
         <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--txt3)' }}>
           {ventasFiltradas.length} {ventasFiltradas.length === 1 ? 'venta' : 'ventas'}
@@ -562,14 +522,8 @@ export default function Ventas() {
                   <td className="txt-right mono">{fmt(v.subtotal)}</td>
                   <td className="txt-right mono">{fmt(v.iva)}</td>
                   <td className="txt-right mono" style={{ fontWeight: 600 }}>{fmt(v.total)}</td>
-                  <td>
-                    {v.metodo_pago === 'transferencia'
-                      ? <span className="badge b-info">Transferencia</span>
-                      : <span className="badge b-neu">Efectivo</span>}
-                  </td>
-                  <td>
-                    <EstadoSelect v={v} onChange={cambiarEstado} />
-                  </td>
+                  <td>{v.metodo_pago === 'transferencia' ? <span className="badge b-info">Transferencia</span> : <span className="badge b-neu">Efectivo</span>}</td>
+                  <td><EstadoSelect v={v} onChange={cambiarEstado} /></td>
                   <td>
                     <div className="gap-8">
                       <button className="btn btn-ghost btn-sm" onClick={() => openPrint(v)}>🖨 Remisión</button>
@@ -592,8 +546,8 @@ export default function Ventas() {
               <button className="modal-close" onClick={() => setModal(false)}>×</button>
             </div>
             <div className="modal-body">
-              <ModalCampos f={form} setF={setForm} esP={esParticular} />
-              <ProductosForm its={items} onAdd={addItem} onRemove={removeItem} onUpd={updateItem} />
+              <ModalCampos f={form} setF={setForm} esP={esParticular} clientes={clientes} puntos={puntos} />
+              <ProductosForm its={items} onAdd={addItem} onRemove={removeItem} onUpd={updateItem} productos={productos} />
               <IVAResumen sub={subtotal} iv={iva} tot={total} conIva={form.con_iva} onToggle={() => setForm(f => ({ ...f, con_iva: !f.con_iva }))} />
               <PagoEstado f={form} setF={setForm} />
               {err && <div style={{ color: 'var(--red)', fontSize: 13, marginTop: 8 }}>{err}</div>}
@@ -614,8 +568,8 @@ export default function Ventas() {
               <button className="modal-close" onClick={() => setEditModal(false)}>×</button>
             </div>
             <div className="modal-body">
-              <ModalCampos f={editForm} setF={setEditForm} esP={esParticularE} />
-              <ProductosForm its={editItems} onAdd={addEditItem} onRemove={removeEditItem} onUpd={updateEditItem} />
+              <ModalCampos f={editForm} setF={setEditForm} esP={esParticularE} clientes={clientes} puntos={puntos} />
+              <ProductosForm its={editItems} onAdd={addEditItem} onRemove={removeEditItem} onUpd={updateEditItem} productos={productos} />
               <IVAResumen sub={subtotalE} iv={ivaE} tot={totalE} conIva={editForm.con_iva} onToggle={() => setEditForm(f => ({ ...f, con_iva: !f.con_iva }))} />
               <PagoEstado f={editForm} setF={setEditForm} />
               {errEdit && <div style={{ color: 'var(--red)', fontSize: 13, marginTop: 8 }}>{errEdit}</div>}
@@ -629,14 +583,7 @@ export default function Ventas() {
       )}
 
       {printData && (
-        <PrintRemision
-          venta={printData.venta}
-          items={printData.items}
-          cliente={printData.cliente}
-          notas={printData.notas}
-          conIva={printData.conIva}
-          onClose={() => setPrintData(null)}
-        />
+        <PrintRemision venta={printData.venta} items={printData.items} cliente={printData.cliente} notas={printData.notas} conIva={printData.conIva} onClose={() => setPrintData(null)} />
       )}
     </div>
   )
