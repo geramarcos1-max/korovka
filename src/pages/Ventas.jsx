@@ -7,6 +7,14 @@ const PARTICULAR = '__particular__'
 function fmt(n) { return '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 }) }
 function folio(prefix) { return prefix + '-' + Date.now().toString(36).toUpperCase() }
 
+const ESTADOS = [
+  { value: 'pendiente',   label: 'Pendiente',   bg: 'var(--amber-s)', color: 'var(--amber-t)', dot: 'var(--amber)' },
+  { value: 'pagada',      label: 'Pagada',      bg: 'var(--ok-s)',    color: 'var(--ok-t)',    dot: 'var(--ok)' },
+  { value: 'degustacion', label: 'Degustación', bg: 'var(--info-s)',  color: 'var(--info-t)',  dot: 'var(--info)' },
+  { value: 'regalado',    label: 'Regalado',    bg: '#f3e8ff',        color: '#7c3aed',        dot: '#a855f7' },
+]
+function estadoMeta(e) { return ESTADOS.find(x => x.value === e) || ESTADOS[0] }
+
 function SortTh({ col, label, sort, onSort, className }) {
   const active = sort.col === col
   return (
@@ -20,6 +28,32 @@ function SortTh({ col, label, sort, onSort, className }) {
         {active && sort.dir === 'desc' ? '▼' : '▲'}
       </span>
     </th>
+  )
+}
+
+function EstadoSelect({ v, onChange }) {
+  const meta = estadoMeta(v.estado)
+  return (
+    <select
+      value={v.estado}
+      onChange={e => onChange(v, e.target.value)}
+      style={{
+        appearance: 'none',
+        WebkitAppearance: 'none',
+        border: 'none',
+        borderRadius: 100,
+        padding: '3px 10px',
+        fontSize: 12,
+        fontWeight: 500,
+        fontFamily: 'inherit',
+        cursor: 'pointer',
+        background: meta.bg,
+        color: meta.color,
+        outline: 'none',
+      }}
+    >
+      {ESTADOS.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
+    </select>
   )
 }
 
@@ -132,7 +166,6 @@ export default function Ventas() {
   const [err, setErr] = useState('')
   const [saving, setSaving] = useState(false)
 
-  // Filtros y orden
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroPago, setFiltroPago] = useState('')
@@ -142,7 +175,11 @@ export default function Ventas() {
     setSort(s => s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
   }
 
-  const emptyForm = { cliente_id: '', punto_id: '', fecha: new Date().toISOString().slice(0, 10), notas: '', con_iva: true, estado: 'pendiente', metodo_pago: 'efectivo' }
+  const emptyForm = {
+    cliente_id: '', punto_id: '',
+    fecha: new Date().toISOString().slice(0, 10),
+    notas: '', con_iva: true, estado: 'pendiente', metodo_pago: 'efectivo',
+  }
   const [form, setForm] = useState(emptyForm)
   const [items, setItems] = useState([{ producto_id: '', cantidad: 1, precio_unitario: '' }])
   const [editForm, setEditForm] = useState(emptyForm)
@@ -166,10 +203,8 @@ export default function Ventas() {
 
   useEffect(() => { load() }, [])
 
-  // Filtrado + ordenamiento
   const ventasFiltradas = useMemo(() => {
     let rows = [...ventas]
-
     if (busqueda) {
       const q = busqueda.toLowerCase()
       rows = rows.filter(v =>
@@ -179,57 +214,54 @@ export default function Ventas() {
       )
     }
     if (filtroEstado) rows = rows.filter(v => v.estado === filtroEstado)
-    if (filtroPago) rows = rows.filter(v => (v.metodo_pago || 'efectivo') === filtroPago)
+    if (filtroPago)   rows = rows.filter(v => (v.metodo_pago || 'efectivo') === filtroPago)
 
     rows.sort((a, b) => {
       let va, vb
       switch (sort.col) {
-        case 'cliente': va = (a.clientes?.nombre || 'zz').toLowerCase(); vb = (b.clientes?.nombre || 'zz').toLowerCase(); break
-        case 'fecha':   va = a.fecha; vb = b.fecha; break
-        case 'subtotal':va = a.subtotal; vb = b.subtotal; break
-        case 'total':   va = a.total; vb = b.total; break
-        case 'estado':  va = a.estado; vb = b.estado; break
-        case 'pago':    va = a.metodo_pago || ''; vb = b.metodo_pago || ''; break
-        default:        va = a.fecha; vb = b.fecha
+        case 'cliente':  va = (a.clientes?.nombre || 'zz').toLowerCase(); vb = (b.clientes?.nombre || 'zz').toLowerCase(); break
+        case 'fecha':    va = a.fecha;    vb = b.fecha;    break
+        case 'subtotal': va = a.subtotal; vb = b.subtotal; break
+        case 'total':    va = a.total;    vb = b.total;    break
+        case 'estado':   va = a.estado;   vb = b.estado;   break
+        case 'pago':     va = a.metodo_pago || ''; vb = b.metodo_pago || ''; break
+        default:         va = a.fecha;    vb = b.fecha
       }
       if (va < vb) return sort.dir === 'asc' ? -1 : 1
-      if (va > vb) return sort.dir === 'asc' ? 1 : -1
+      if (va > vb) return sort.dir === 'asc' ? 1  : -1
       return 0
     })
-
     return rows
   }, [ventas, busqueda, filtroEstado, filtroPago, sort])
 
-  function addItem() { setItems(it => [...it, { producto_id: '', cantidad: 1, precio_unitario: '' }]) }
+  function addItem()  { setItems(it => [...it, { producto_id: '', cantidad: 1, precio_unitario: '' }]) }
   function removeItem(i) { setItems(it => it.filter((_, idx) => idx !== i)) }
   function updateItem(i, key, val) {
     setItems(it => {
-      const next = [...it]
-      next[i] = { ...next[i], [key]: val }
+      const next = [...it]; next[i] = { ...next[i], [key]: val }
       if (key === 'producto_id') { const p = productos.find(p => p.id === val); if (p) next[i].precio_unitario = p.precio_base }
       return next
     })
   }
 
-  function addEditItem() { setEditItems(it => [...it, { producto_id: '', cantidad: 1, precio_unitario: '' }]) }
+  function addEditItem()  { setEditItems(it => [...it, { producto_id: '', cantidad: 1, precio_unitario: '' }]) }
   function removeEditItem(i) { setEditItems(it => it.filter((_, idx) => idx !== i)) }
   function updateEditItem(i, key, val) {
     setEditItems(it => {
-      const next = [...it]
-      next[i] = { ...next[i], [key]: val }
+      const next = [...it]; next[i] = { ...next[i], [key]: val }
       if (key === 'producto_id') { const p = productos.find(p => p.id === val); if (p) next[i].precio_unitario = p.precio_base }
       return next
     })
   }
 
-  const subtotal = items.reduce((a, it) => a + (Number(it.cantidad) * Number(it.precio_unitario || 0)), 0)
-  const iva = form.con_iva ? subtotal * IVA_RATE : 0
-  const total = subtotal + iva
+  const subtotal  = items.reduce((a, it) => a + (Number(it.cantidad) * Number(it.precio_unitario || 0)), 0)
+  const iva       = form.con_iva ? subtotal * IVA_RATE : 0
+  const total     = subtotal + iva
   const esParticular = form.cliente_id === PARTICULAR
 
   const subtotalE = editItems.reduce((a, it) => a + (Number(it.cantidad) * Number(it.precio_unitario || 0)), 0)
-  const ivaE = editForm.con_iva ? subtotalE * IVA_RATE : 0
-  const totalE = subtotalE + ivaE
+  const ivaE      = editForm.con_iva ? subtotalE * IVA_RATE : 0
+  const totalE    = subtotalE + ivaE
   const esParticularE = editForm.cliente_id === PARTICULAR
 
   async function openEdit(v) {
@@ -254,19 +286,41 @@ export default function Ventas() {
     if (editItems.some(i => !i.producto_id || !i.cantidad || !i.precio_unitario)) { setErrEdit('Completa todos los productos.'); return }
     setSaving(true)
     const clienteIdReal = esParticularE ? null : editForm.cliente_id
-    await supabase.from('ventas').update({ cliente_id: clienteIdReal, punto_id: editForm.punto_id || null, fecha: editForm.fecha, notas: editForm.notas, subtotal: subtotalE, iva: ivaE, total: totalE, estado: editForm.estado, metodo_pago: editForm.metodo_pago }).eq('id', editingVenta.id)
+    const cxcEstado = editForm.estado === 'pagada' ? 'pagada' : 'pendiente'
+    const cxcPagado = editForm.estado === 'pagada' ? totalE : 0
+
+    await supabase.from('ventas').update({
+      cliente_id: clienteIdReal, punto_id: editForm.punto_id || null,
+      fecha: editForm.fecha, notas: editForm.notas,
+      subtotal: subtotalE, iva: ivaE, total: totalE,
+      estado: editForm.estado, metodo_pago: editForm.metodo_pago,
+    }).eq('id', editingVenta.id)
+
     await supabase.from('venta_items').delete().eq('venta_id', editingVenta.id)
-    await supabase.from('venta_items').insert(editItems.map(i => ({ venta_id: editingVenta.id, producto_id: i.producto_id, cantidad: Number(i.cantidad), precio_unitario: Number(i.precio_unitario), subtotal: Number(i.cantidad) * Number(i.precio_unitario) })))
+    await supabase.from('venta_items').insert(editItems.map(i => ({
+      venta_id: editingVenta.id,
+      producto_id: i.producto_id,
+      cantidad: Number(i.cantidad),
+      precio_unitario: Number(i.precio_unitario),
+      subtotal: Number(i.cantidad) * Number(i.precio_unitario),
+    })))
     await supabase.from('movimientos_inventario').delete().eq('referencia_id', editingVenta.id).eq('referencia_tipo', 'venta')
-    await supabase.from('movimientos_inventario').insert(editItems.map(i => ({ producto_id: i.producto_id, tipo: 'salida', cantidad: -Number(i.cantidad), concepto: 'Venta directa ' + editingVenta.folio, referencia_id: editingVenta.id, referencia_tipo: 'venta', creado_por: profile?.id })))
+    await supabase.from('movimientos_inventario').insert(editItems.map(i => ({
+      producto_id: i.producto_id, tipo: 'salida', cantidad: -Number(i.cantidad),
+      concepto: 'Venta directa ' + editingVenta.folio,
+      referencia_id: editingVenta.id, referencia_tipo: 'venta', creado_por: profile?.id,
+    })))
+
     if (!esParticularE && clienteIdReal) {
       const { data: cxc } = await supabase.from('cuentas_por_cobrar').select('id').eq('venta_id', editingVenta.id).single()
-      if (cxc) { await supabase.from('cuentas_por_cobrar').update({ cliente_id: clienteIdReal, monto_total: totalE, monto_pagado: editForm.estado === 'pagada' ? totalE : 0, estado: editForm.estado === 'pagada' ? 'pagada' : 'pendiente' }).eq('venta_id', editingVenta.id) }
-      else { await supabase.from('cuentas_por_cobrar').insert({ venta_id: editingVenta.id, cliente_id: clienteIdReal, monto_total: totalE, monto_pagado: editForm.estado === 'pagada' ? totalE : 0, estado: editForm.estado === 'pagada' ? 'pagada' : 'pendiente' }) }
+      if (cxc) {
+        await supabase.from('cuentas_por_cobrar').update({ cliente_id: clienteIdReal, monto_total: totalE, monto_pagado: cxcPagado, estado: cxcEstado }).eq('venta_id', editingVenta.id)
+      } else {
+        await supabase.from('cuentas_por_cobrar').insert({ venta_id: editingVenta.id, cliente_id: clienteIdReal, monto_total: totalE, monto_pagado: cxcPagado, estado: cxcEstado })
+      }
     }
-    setSaving(false)
-    setEditModal(false)
-    load()
+
+    setSaving(false); setEditModal(false); load()
   }
 
   async function save() {
@@ -274,18 +328,48 @@ export default function Ventas() {
     if (items.some(i => !i.producto_id || !i.cantidad || !i.precio_unitario)) { setErr('Completa todos los productos.'); return }
     setSaving(true)
     const clienteIdReal = esParticular ? null : form.cliente_id
-    const { data: venta, error } = await supabase.from('ventas').insert({ folio: folio('VD'), tipo: 'directa', cliente_id: clienteIdReal, punto_id: form.punto_id || null, fecha: form.fecha, subtotal, iva, total, notas: form.notas, estado: form.estado, metodo_pago: form.metodo_pago, creado_por: profile?.id }).select().single()
+
+    const { data: venta, error } = await supabase.from('ventas').insert({
+      folio: folio('VD'), tipo: 'directa', cliente_id: clienteIdReal,
+      punto_id: form.punto_id || null, fecha: form.fecha, subtotal, iva, total,
+      notas: form.notas, estado: form.estado, metodo_pago: form.metodo_pago, creado_por: profile?.id,
+    }).select().single()
+
     if (error) { setSaving(false); setErr(error.message); return }
-    await supabase.from('venta_items').insert(items.map(i => ({ venta_id: venta.id, producto_id: i.producto_id, cantidad: Number(i.cantidad), precio_unitario: Number(i.precio_unitario), subtotal: Number(i.cantidad) * Number(i.precio_unitario) })))
-    if (!esParticular) { await supabase.from('cuentas_por_cobrar').insert({ venta_id: venta.id, cliente_id: clienteIdReal, monto_total: total, monto_pagado: form.estado === 'pagada' ? total : 0, estado: form.estado === 'pagada' ? 'pagada' : 'pendiente' }) }
-    await supabase.from('movimientos_inventario').insert(items.map(i => ({ producto_id: i.producto_id, tipo: 'salida', cantidad: -Number(i.cantidad), concepto: 'Venta directa ' + venta.folio, referencia_id: venta.id, referencia_tipo: 'venta', creado_por: profile?.id })))
-    setSaving(false); setModal(false); setForm(emptyForm); setItems([{ producto_id: '', cantidad: 1, precio_unitario: '' }]); load()
+
+    await supabase.from('venta_items').insert(items.map(i => ({
+      venta_id: venta.id, producto_id: i.producto_id,
+      cantidad: Number(i.cantidad), precio_unitario: Number(i.precio_unitario),
+      subtotal: Number(i.cantidad) * Number(i.precio_unitario),
+    })))
+
+    if (!esParticular) {
+      await supabase.from('cuentas_por_cobrar').insert({
+        venta_id: venta.id, cliente_id: clienteIdReal, monto_total: total,
+        monto_pagado: form.estado === 'pagada' ? total : 0,
+        estado: form.estado === 'pagada' ? 'pagada' : 'pendiente',
+      })
+    }
+
+    await supabase.from('movimientos_inventario').insert(items.map(i => ({
+      producto_id: i.producto_id, tipo: 'salida', cantidad: -Number(i.cantidad),
+      concepto: 'Venta directa ' + venta.folio,
+      referencia_id: venta.id, referencia_tipo: 'venta', creado_por: profile?.id,
+    })))
+
+    setSaving(false); setModal(false)
+    setForm(emptyForm); setItems([{ producto_id: '', cantidad: 1, precio_unitario: '' }])
+    load()
   }
 
-  async function toggleEstado(v) {
-    const nuevoEstado = v.estado === 'pagada' ? 'pendiente' : 'pagada'
+  async function cambiarEstado(v, nuevoEstado) {
     await supabase.from('ventas').update({ estado: nuevoEstado }).eq('id', v.id)
-    if (v.cliente_id) { await supabase.from('cuentas_por_cobrar').update({ estado: nuevoEstado, monto_pagado: nuevoEstado === 'pagada' ? v.total : 0 }).eq('venta_id', v.id) }
+    if (v.cliente_id) {
+      await supabase.from('cuentas_por_cobrar').update({
+        estado: nuevoEstado === 'pagada' ? 'pagada' : 'pendiente',
+        monto_pagado: nuevoEstado === 'pagada' ? v.total : 0,
+      }).eq('venta_id', v.id)
+    }
     load()
   }
 
@@ -302,7 +386,33 @@ export default function Ventas() {
     const { data: vitems } = await supabase.from('venta_items').select('*, productos(nombre, unidad)').eq('venta_id', v.id)
     let cliente = null
     if (v.cliente_id) { const { data } = await supabase.from('clientes').select('*').eq('id', v.cliente_id).single(); cliente = data }
-    setPrintData({ venta: v, items: (vitems || []).map(i => ({ producto_nombre: i.productos?.nombre, unidad: i.productos?.unidad, cantidad: i.cantidad, precio_unitario: i.precio_unitario, subtotal: i.subtotal })), cliente, notas: v.notas, conIva: v.iva > 0 })
+    setPrintData({
+      venta: v,
+      items: (vitems || []).map(i => ({ producto_nombre: i.productos?.nombre, unidad: i.productos?.unidad, cantidad: i.cantidad, precio_unitario: i.precio_unitario, subtotal: i.subtotal })),
+      cliente, notas: v.notas, conIva: v.iva > 0,
+    })
+  }
+
+  function IVAResumen({ sub, iv, tot, conIva, onToggle }) {
+    return (
+      <div style={{ background: 'var(--forest-s)', borderRadius: 'var(--r2)', padding: '12px 14px', fontSize: 13 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ color: 'var(--txt2)' }}>Subtotal</span><span className="mono">{fmt(sub)}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button type="button" onClick={onToggle} style={{ width: 36, height: 20, borderRadius: 10, border: 'none', background: conIva ? 'var(--forest)' : 'var(--bdr2)', cursor: 'pointer', position: 'relative', transition: 'background .15s', flexShrink: 0 }}>
+              <span style={{ position: 'absolute', top: 2, left: conIva ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .15s' }} />
+            </button>
+            <span style={{ color: conIva ? 'var(--txt)' : 'var(--txt3)' }}>IVA (16%)</span>
+          </div>
+          <span className="mono" style={{ color: conIva ? 'var(--txt)' : 'var(--txt3)' }}>{fmt(iv)}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid var(--bdr)', paddingTop: 8, color: 'var(--forest)' }}>
+          <span>Total</span><span className="mono">{fmt(tot)}</span>
+        </div>
+      </div>
+    )
   }
 
   function ProductosForm({ its, onAdd, onRemove, onUpd }) {
@@ -330,28 +440,6 @@ export default function Ventas() {
       ))}
       <button className="btn btn-ghost btn-sm" onClick={onAdd} style={{ marginBottom: 14 }}>+ Agregar producto</button>
     </>
-  }
-
-  function IVAResumen({ sub, iv, tot, conIva, onToggle }) {
-    return (
-      <div style={{ background: 'var(--forest-s)', borderRadius: 'var(--r2)', padding: '12px 14px', fontSize: 13 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ color: 'var(--txt2)' }}>Subtotal</span><span className="mono">{fmt(sub)}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button type="button" onClick={onToggle} style={{ width: 36, height: 20, borderRadius: 10, border: 'none', background: conIva ? 'var(--forest)' : 'var(--bdr2)', cursor: 'pointer', position: 'relative', transition: 'background .15s', flexShrink: 0 }}>
-              <span style={{ position: 'absolute', top: 2, left: conIva ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .15s' }} />
-            </button>
-            <span style={{ color: conIva ? 'var(--txt)' : 'var(--txt3)' }}>IVA (16%)</span>
-          </div>
-          <span className="mono" style={{ color: conIva ? 'var(--txt)' : 'var(--txt3)' }}>{fmt(iv)}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, borderTop: '1px solid var(--bdr)', paddingTop: 8, color: 'var(--forest)' }}>
-          <span>Total</span><span className="mono">{fmt(tot)}</span>
-        </div>
-      </div>
-    )
   }
 
   function ModalCampos({ f, setF, esP }) {
@@ -399,6 +487,8 @@ export default function Ventas() {
           <select className="form-select" value={f.estado} onChange={e => setF(x => ({ ...x, estado: e.target.value }))}>
             <option value="pendiente">Pendiente</option>
             <option value="pagada">Pagada</option>
+            <option value="degustacion">Degustación</option>
+            <option value="regalado">Regalado</option>
           </select>
         </div>
       </div>
@@ -414,7 +504,6 @@ export default function Ventas() {
         <button className="btn btn-amber" onClick={() => { setErr(''); setModal(true) }}>+ Nueva venta</button>
       </div>
 
-      {/* Barra de filtros */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
         <input
           className="form-input"
@@ -423,10 +512,12 @@ export default function Ventas() {
           value={busqueda}
           onChange={e => setBusqueda(e.target.value)}
         />
-        <select className="form-select" style={{ maxWidth: 150 }} value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
+        <select className="form-select" style={{ maxWidth: 160 }} value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
           <option value="">Todos los estados</option>
           <option value="pendiente">Pendiente</option>
           <option value="pagada">Pagada</option>
+          <option value="degustacion">Degustación</option>
+          <option value="regalado">Regalado</option>
         </select>
         <select className="form-select" style={{ maxWidth: 170 }} value={filtroPago} onChange={e => setFiltroPago(e.target.value)}>
           <option value="">Todos los pagos</option>
@@ -449,14 +540,14 @@ export default function Ventas() {
             <thead>
               <tr>
                 <th>Folio</th>
-                <SortTh col="cliente" label="Cliente" sort={sort} onSort={handleSort} />
+                <SortTh col="cliente"  label="Cliente"  sort={sort} onSort={handleSort} />
                 <th>Notas</th>
-                <SortTh col="fecha" label="Fecha" sort={sort} onSort={handleSort} />
+                <SortTh col="fecha"    label="Fecha"    sort={sort} onSort={handleSort} />
                 <SortTh col="subtotal" label="Subtotal" sort={sort} onSort={handleSort} className="txt-right" />
                 <th className="txt-right">IVA</th>
-                <SortTh col="total" label="Total" sort={sort} onSort={handleSort} className="txt-right" />
-                <SortTh col="pago" label="Pago" sort={sort} onSort={handleSort} />
-                <SortTh col="estado" label="Estado" sort={sort} onSort={handleSort} />
+                <SortTh col="total"    label="Total"    sort={sort} onSort={handleSort} className="txt-right" />
+                <SortTh col="pago"     label="Pago"     sort={sort} onSort={handleSort} />
+                <SortTh col="estado"   label="Estado"   sort={sort} onSort={handleSort} />
                 <th></th>
               </tr>
             </thead>
@@ -477,16 +568,13 @@ export default function Ventas() {
                       : <span className="badge b-neu">Efectivo</span>}
                   </td>
                   <td>
-                    <button onClick={() => toggleEstado(v)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 100, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', transition: 'background .15s', background: v.estado === 'pagada' ? 'var(--ok-s)' : 'var(--amber-s)', color: v.estado === 'pagada' ? 'var(--ok-t)' : 'var(--amber-t)' }} title="Clic para cambiar estado">
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: v.estado === 'pagada' ? 'var(--ok)' : 'var(--amber)' }} />
-                      {v.estado === 'pagada' ? 'Pagada' : 'Pendiente'}
-                    </button>
+                    <EstadoSelect v={v} onChange={cambiarEstado} />
                   </td>
                   <td>
                     <div className="gap-8">
                       <button className="btn btn-ghost btn-sm" onClick={() => openPrint(v)}>🖨 Remisión</button>
                       <button className="btn btn-ghost btn-sm" onClick={() => openEdit(v)}>Editar</button>
-                      <button className="btn btn-red btn-sm" onClick={() => eliminar(v)}>Eliminar</button>
+                      <button className="btn btn-red btn-sm"   onClick={() => eliminar(v)}>Eliminar</button>
                     </div>
                   </td>
                 </tr>
@@ -496,7 +584,6 @@ export default function Ventas() {
         </div>
       </div>
 
-      {/* Modal nueva venta */}
       {modal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
           <div className="modal" style={{ maxWidth: 600 }}>
@@ -519,7 +606,6 @@ export default function Ventas() {
         </div>
       )}
 
-      {/* Modal editar venta */}
       {editModal && editingVenta && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditModal(false)}>
           <div className="modal" style={{ maxWidth: 600 }}>
@@ -543,7 +629,14 @@ export default function Ventas() {
       )}
 
       {printData && (
-        <PrintRemision venta={printData.venta} items={printData.items} cliente={printData.cliente} notas={printData.notas} conIva={printData.conIva} onClose={() => setPrintData(null)} />
+        <PrintRemision
+          venta={printData.venta}
+          items={printData.items}
+          cliente={printData.cliente}
+          notas={printData.notas}
+          conIva={printData.conIva}
+          onClose={() => setPrintData(null)}
+        />
       )}
     </div>
   )
