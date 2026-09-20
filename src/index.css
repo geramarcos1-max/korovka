@@ -35,32 +35,7 @@
   --side-w:   240px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --forest:#A8C4BC; --forest-m:#C0D8D0; --forest-s:#0E2420;
-    --cream:#161210; --cream-d:#0E0C0A; --bg:#121008; --card:#1A1612;
-    --taupe:#4A4030; --taupe-d:#5A5040;
-    --bdr:#2A2418; --bdr2:#3A3228;
-    --txt:#EDE4D4; --txt2:#9A8E7A; --txt3:#5A5040;
-    --amber:#D4924A; --amber-s:#221500; --amber-t:#E8B070;
-    --ok:#3DA870; --ok-s:#0C2018; --ok-t:#60D090;
-    --warn:#C8A030; --warn-s:#1E1500;
-    --red:#D04848; --red-s:#2A0E0E; --red-t:#F07070;
-    --info:#5A9AD0; --info-s:#0C1830; --info-t:#90C0F0;
-  }
-}
-:root[data-theme="dark"] {
-  --forest:#A8C4BC; --forest-m:#C0D8D0; --forest-s:#0E2420;
-  --cream:#161210; --cream-d:#0E0C0A; --bg:#121008; --card:#1A1612;
-  --taupe:#4A4030; --taupe-d:#5A5040;
-  --bdr:#2A2418; --bdr2:#3A3228;
-  --txt:#EDE4D4; --txt2:#9A8E7A; --txt3:#5A5040;
-  --amber:#D4924A; --amber-s:#221500; --amber-t:#E8B070;
-  --ok:#3DA870; --ok-s:#0C2018; --ok-t:#60D090;
-  --warn:#C8A030; --warn-s:#1E1500;
-  --red:#D04848; --red-s:#2A0E0E; --red-t:#F07070;
-  --info:#5A9AD0; --info-s:#0C1830; --info-t:#90C0F0;
-}
+/* Sin modo oscuro — paleta Korovka siempre activa */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
