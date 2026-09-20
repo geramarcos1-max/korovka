@@ -148,6 +148,18 @@ CREATE TABLE IF NOT EXISTS cuentas_por_cobrar (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- ─── ETIQUETAS DE PRODUCTOS ─────────────────────────────────
+CREATE TABLE IF NOT EXISTS etiquetas_inventario (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  producto_id UUID REFERENCES productos(id),
+  tipo TEXT NOT NULL CHECK (tipo IN ('entrada', 'salida', 'ajuste')),
+  cantidad INTEGER NOT NULL,
+  concepto TEXT NOT NULL,
+  fecha DATE NOT NULL DEFAULT CURRENT_DATE,
+  creado_por UUID REFERENCES profiles(id),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- ─── ROW LEVEL SECURITY ─────────────────────────────────────
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE productos ENABLE ROW LEVEL SECURITY;
@@ -175,6 +187,8 @@ CREATE POLICY "auth" ON consignacion_liquidaciones FOR ALL TO authenticated USIN
 CREATE POLICY "auth" ON consignacion_liquidacion_items FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "auth" ON movimientos_inventario FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "auth" ON cuentas_por_cobrar FOR ALL TO authenticated USING (true) WITH CHECK (true);
+ALTER TABLE etiquetas_inventario ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "auth" ON etiquetas_inventario FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Trigger: crear perfil automáticamente al registrar usuario
 CREATE OR REPLACE FUNCTION handle_new_user()
