@@ -148,6 +148,29 @@ CREATE TABLE IF NOT EXISTS cuentas_por_cobrar (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- ─── ODC INTERNAS ───────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS odc_internas (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  folio TEXT UNIQUE NOT NULL,
+  fecha DATE NOT NULL DEFAULT CURRENT_DATE,
+  estado TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'enviado', 'recibido')),
+  notas TEXT,
+  creado_por UUID REFERENCES profiles(id),
+  fecha_enviado DATE,
+  enviado_por UUID REFERENCES profiles(id),
+  fecha_recibido DATE,
+  recibido_por UUID REFERENCES profiles(id),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS odc_interna_items (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  odc_id UUID REFERENCES odc_internas(id) ON DELETE CASCADE,
+  producto_id UUID REFERENCES productos(id),
+  cantidad NUMERIC(10,3) NOT NULL,
+  notas TEXT
+);
+
 -- ─── ETIQUETAS DE PRODUCTOS ─────────────────────────────────
 CREATE TABLE IF NOT EXISTS etiquetas_inventario (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -189,6 +212,10 @@ CREATE POLICY "auth" ON movimientos_inventario FOR ALL TO authenticated USING (t
 CREATE POLICY "auth" ON cuentas_por_cobrar FOR ALL TO authenticated USING (true) WITH CHECK (true);
 ALTER TABLE etiquetas_inventario ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "auth" ON etiquetas_inventario FOR ALL TO authenticated USING (true) WITH CHECK (true);
+ALTER TABLE odc_internas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "auth" ON odc_internas FOR ALL TO authenticated USING (true) WITH CHECK (true);
+ALTER TABLE odc_interna_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "auth" ON odc_interna_items FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Trigger: crear perfil automáticamente al registrar usuario
 CREATE OR REPLACE FUNCTION handle_new_user()
