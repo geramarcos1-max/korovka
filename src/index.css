@@ -49,7 +49,7 @@ body {
 }
 
 /* ── Layout ── */
-.app-shell { display: flex; min-height: 100vh; overflow-x: hidden; }
+.app-shell { display: flex; min-height: 100vh; }
 
 .sidebar {
   width: var(--side-w);
@@ -71,7 +71,6 @@ body {
   display: flex;
   flex-direction: column;
   background: var(--bg);
-  overflow-x: hidden;
 }
 
 .topbar {
