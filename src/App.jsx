@@ -11,6 +11,7 @@ import Productos from './pages/Productos'
 import Clientes from './pages/Clientes'
 import Puntos from './pages/Puntos'
 import Gastos from './pages/Gastos'
+import OdcInterna from './pages/OdcInterna'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -34,6 +35,7 @@ function AppRoutes() {
         <Route path="clientes" element={<Clientes />} />
         <Route path="puntos" element={<Puntos />} />
         <Route path="gastos" element={<Gastos />} />
+        <Route path="odc-interna" element={<OdcInterna />} />
       </Route>
     </Routes>
   )
