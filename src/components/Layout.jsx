@@ -68,21 +68,21 @@ export default function Layout() {
           })}
         </div>
 
-        <div style={{ padding: '14px 20px 20px', borderTop: '1px solid var(--bdr)' }}>
+        <div style={{ padding: '14px 20px 20px', borderTop: '1px solid rgba(255,255,255,.10)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--forest)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
+            <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(246,239,223,.20)', color: '#F6EFDF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
               {(profile?.nombre || 'U')[0].toUpperCase()}
             </div>
             <div>
-              <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--txt)', lineHeight: 1.2 }}>{profile?.nombre || 'Usuario'}</div>
-              <div style={{ fontSize: 10.5, color: 'var(--txt3)', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 500 }}>{profile?.rol}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 500, color: '#F6EFDF', lineHeight: 1.2 }}>{profile?.nombre || 'Usuario'}</div>
+              <div style={{ fontSize: 10.5, color: 'rgba(246,239,223,.45)', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 500 }}>{profile?.rol}</div>
             </div>
           </div>
           <button
             onClick={handleSignOut}
-            style={{ background: 'none', border: '1px solid var(--bdr2)', color: 'var(--txt3)', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', width: '100%', transition: 'color .12s, background .12s' }}
-            onMouseEnter={e => { e.target.style.background = 'var(--cream-d)'; e.target.style.color = 'var(--txt)' }}
-            onMouseLeave={e => { e.target.style.background = 'none'; e.target.style.color = 'var(--txt3)' }}
+            style={{ background: 'none', border: '1px solid rgba(255,255,255,.15)', color: 'rgba(246,239,223,.55)', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', width: '100%', transition: 'color .12s, background .12s' }}
+            onMouseEnter={e => { e.target.style.background = 'rgba(246,239,223,.10)'; e.target.style.color = '#F6EFDF' }}
+            onMouseLeave={e => { e.target.style.background = 'none'; e.target.style.color = 'rgba(246,239,223,.55)' }}
           >
             Cerrar sesión
           </button>
