@@ -272,7 +272,7 @@ export default function Ventas() {
 
   async function load() {
     const [{ data: v }, { data: c }, { data: p }, { data: pr }] = await Promise.all([
-      supabase.from('ventas').select('*, clientes(nombre)').order('created_at', { ascending: false }).limit(200),
+      supabase.from('ventas').select('*, clientes(nombre), venta_items(cantidad, productos(nombre))').order('created_at', { ascending: false }).limit(200),
       supabase.from('clientes').select('id, nombre, rfc, direccion').eq('activo', true).order('nombre'),
       supabase.from('puntos_distribucion').select('id, nombre, modelo').eq('activo', true).eq('modelo', 'directa').order('nombre'),
       supabase.from('productos').select('id, nombre, precio_base, unidad').eq('activo', true).order('nombre'),
@@ -501,6 +501,7 @@ export default function Ventas() {
               <tr>
                 <th>Folio</th>
                 <SortTh col="cliente"  label="Cliente"  sort={sort} onSort={handleSort} />
+                <th>Productos</th>
                 <th>Notas</th>
                 <SortTh col="fecha"    label="Fecha"    sort={sort} onSort={handleSort} />
                 <SortTh col="subtotal" label="Subtotal" sort={sort} onSort={handleSort} className="txt-right" />
@@ -512,11 +513,20 @@ export default function Ventas() {
               </tr>
             </thead>
             <tbody>
-              {ventasFiltradas.length === 0 && <tr><td colSpan={10} className="empty">Sin ventas</td></tr>}
+              {ventasFiltradas.length === 0 && <tr><td colSpan={11} className="empty">Sin ventas</td></tr>}
               {ventasFiltradas.map(v => (
                 <tr key={v.id}>
                   <td className="mono">{v.folio}</td>
                   <td>{v.clientes?.nombre || <span style={{ color: 'var(--txt3)', fontSize: 12 }}>Cliente particular</span>}</td>
+                  <td style={{ fontSize: 12, color: 'var(--txt2)', maxWidth: 200 }}>
+                    {v.venta_items?.length > 0
+                      ? v.venta_items.map((it, i) => (
+                          <span key={i} style={{ display: 'inline-block', background: 'var(--forest-s)', borderRadius: 4, padding: '1px 6px', marginRight: 4, marginBottom: 2, whiteSpace: 'nowrap' }}>
+                            {it.productos?.nombre} ×{it.cantidad}
+                          </span>
+                        ))
+                      : <span style={{ color: 'var(--txt3)' }}>—</span>}
+                  </td>
                   <td style={{ fontSize: 12, color: 'var(--txt2)', maxWidth: 180 }}>{v.notas || <span style={{ color: 'var(--txt3)' }}>—</span>}</td>
                   <td>{v.fecha}</td>
                   <td className="txt-right mono">{fmt(v.subtotal)}</td>
