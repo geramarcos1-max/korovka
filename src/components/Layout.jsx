@@ -8,7 +8,7 @@ const nav = [
   { to: '/consignacion', label: 'Consignación', icon: '📦' },
   { to: '/cxc', label: 'Cuentas por Cobrar', icon: '💰' },
   { to: '/gastos', label: 'Gastos', icon: '💸' },
-  { to: '/odc-interna', label: 'ODC Interna', icon: '📋' },
+  { to: '/odc-interna', label: 'ODC Interna', icon: '🗒️' },
   { label: 'CATÁLOGOS', type: 'label' },
   { to: '/inventario', label: 'Inventario', icon: '📊' },
   { to: '/productos', label: 'Productos', icon: '🧀' },
