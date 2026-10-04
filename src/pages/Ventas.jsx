@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { SEAL_B64, LOGO_B64 } from '../lib/brandImages'
 
 const IVA_RATE = 0.16
 const PARTICULAR = '__particular__'
@@ -175,38 +176,6 @@ function ProductosForm({ its, onAdd, onRemove, onUpd, productos }) {
   </>
 }
 
-const LANDSCAPE_SVG = `<svg viewBox="0 0 320 65" xmlns="http://www.w3.org/2000/svg" width="100%" style="display:block">
-  <path d="M0,65 L0,42 Q20,38 35,22 Q50,8 65,20 Q80,32 95,18 Q115,2 130,16 Q145,28 165,10 Q185,-4 200,14 Q215,28 235,16 Q255,4 270,18 Q285,30 300,20 Q310,14 320,18 L320,65 Z" fill="#063831" opacity="0.12"/>
-  <path d="M0,65 L0,50 Q15,46 28,34 Q40,22 55,38 Q68,50 85,32 Q100,16 115,34 Q128,48 148,30 Q165,14 180,32 Q193,46 215,28 Q232,12 250,30 Q265,44 285,32 Q298,24 320,38 L320,65 Z" fill="#063831" opacity="0.22"/>
-  <rect x="0" y="58" width="320" height="7" fill="#063831" opacity="0.14"/>
-  <polygon points="5,58 13,33 21,58" fill="#063831"/>
-  <polygon points="17,58 26,28 35,58" fill="#063831"/>
-  <polygon points="11,50 19,26 27,50" fill="#063831"/>
-  <polygon points="287,58 295,33 303,58" fill="#063831"/>
-  <polygon points="299,58 307,28 315,58" fill="#063831"/>
-  <polygon points="281,52 289,28 297,52" fill="#063831"/>
-  <line x1="44" y1="52" x2="44" y2="62" stroke="#063831" stroke-width="1.5"/>
-  <line x1="58" y1="51" x2="58" y2="61" stroke="#063831" stroke-width="1.5"/>
-  <line x1="72" y1="51" x2="72" y2="61" stroke="#063831" stroke-width="1.5"/>
-  <line x1="44" y1="54" x2="72" y2="54" stroke="#063831" stroke-width="1"/>
-  <line x1="44" y1="58" x2="72" y2="58" stroke="#063831" stroke-width="1"/>
-  <ellipse cx="140" cy="46" rx="19" ry="9" fill="#063831"/>
-  <ellipse cx="124" cy="49" rx="8" ry="6" fill="#063831"/>
-  <ellipse cx="117" cy="54" rx="5" ry="4" fill="#063831"/>
-  <rect x="128" y="53" width="4" height="9" rx="1" fill="#063831"/>
-  <rect x="136" y="54" width="4" height="8" rx="1" fill="#063831"/>
-  <rect x="145" y="54" width="4" height="8" rx="1" fill="#063831"/>
-  <rect x="152" y="53" width="4" height="9" rx="1" fill="#063831"/>
-  <path d="M157,44 Q163,37 161,31" stroke="#063831" stroke-width="2" stroke-linecap="round" fill="none"/>
-  <ellipse cx="205" cy="42" rx="17" ry="8" fill="#063831"/>
-  <ellipse cx="220" cy="36" rx="7" ry="5" fill="#063831"/>
-  <ellipse cx="226" cy="32" rx="5" ry="4" fill="#063831"/>
-  <rect x="194" y="48" width="4" height="10" rx="1" fill="#063831"/>
-  <rect x="202" y="49" width="4" height="9" rx="1" fill="#063831"/>
-  <rect x="210" y="49" width="4" height="9" rx="1" fill="#063831"/>
-  <rect x="217" y="48" width="4" height="10" rx="1" fill="#063831"/>
-  <path d="M191,40 Q184,33 186,27" stroke="#063831" stroke-width="2" stroke-linecap="round" fill="none"/>
-</svg>`
 
 function PrintRemision({ venta, items, cliente, notas, conIva, onClose }) {
   const sub = items.reduce((a, i) => a + i.subtotal, 0)
@@ -254,10 +223,10 @@ function PrintRemision({ venta, items, cliente, notas, conIva, onClose }) {
   .total-final .t-lbl{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;opacity:.75}
   .total-final .t-val{font-family:'Playfair Display',Georgia,serif;font-size:22px;font-weight:700}
   .notas{margin-top:14px;padding:10px 12px;background:#f9f6f1;border-radius:7px;font-size:12px;color:#666;border-left:2px solid #d4c9b4}
-  .landscape{margin-top:18px;border-radius:6px;overflow:hidden;opacity:.85}
-  .tagline{text-align:center;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#aaa;font-weight:500;margin-top:8px}
-  .footer{margin-top:12px;text-align:center;padding-top:12px;border-top:1px dashed #ddd6ca}
-  .footer-thanks{font-family:'Playfair Display',Georgia,serif;font-size:13px;color:#063831;font-weight:600}
+  .brand-footer{margin-top:20px;padding-top:16px;border-top:1px dashed #ddd6ca;display:flex;flex-direction:column;align-items:center;gap:10px}
+  .brand-footer img.seal{width:90px;height:90px;object-fit:contain}
+  .brand-footer img.logo{width:160px;object-fit:contain}
+  .footer-thanks{font-family:'Playfair Display',Georgia,serif;font-size:12px;color:#888;font-weight:400;text-align:center;margin-top:4px}
   @media print{body{padding:0}@page{margin:12mm}}
 </style>
 </head>
@@ -306,9 +275,9 @@ function PrintRemision({ venta, items, cliente, notas, conIva, onClose }) {
       </div>
     </div>
     ${notas ? `<div class="notas"><strong>Nota:</strong> ${notas}</div>` : ''}
-    <div class="landscape">${LANDSCAPE_SVG}</div>
-    <div class="tagline">Leche entera · Artesanal · 100% Natural · Sierra de Durango</div>
-    <div class="footer">
+    <div class="brand-footer">
+      <img class="seal" src="${SEAL_B64}" alt="Sello Korovka"/>
+      <img class="logo" src="${LOGO_B64}" alt="Korovka"/>
       <div class="footer-thanks">¡Gracias por tu preferencia!</div>
     </div>
   </div>
@@ -401,16 +370,11 @@ function PrintRemision({ venta, items, cliente, notas, conIva, onClose }) {
                     <strong style={{ color: '#555' }}>Nota:</strong> {notas}
                   </div>
                 )}
-                {/* Landscape illustration */}
-                <div style={{ marginTop: 16, borderRadius: 6, overflow: 'hidden', opacity: .82 }}
-                  dangerouslySetInnerHTML={{ __html: LANDSCAPE_SVG }} />
-                {/* Tagline */}
-                <div style={{ textAlign: 'center', fontSize: 8.5, letterSpacing: '.13em', textTransform: 'uppercase', color: '#bbb', fontWeight: 500, marginTop: 7 }}>
-                  Leche entera · Artesanal · 100% Natural · Sierra de Durango
-                </div>
-                {/* Footer */}
-                <div style={{ marginTop: 12, textAlign: 'center', paddingTop: 12, borderTop: '1px dashed #e0d9ce' }}>
-                  <div style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: 12, color: '#063831', fontWeight: 600 }}>¡Gracias por tu preferencia!</div>
+                {/* Brand footer */}
+                <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px dashed #e0d9ce', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                  <img src={SEAL_B64} alt="Sello Korovka" style={{ width: 80, height: 80, objectFit: 'contain' }} />
+                  <img src={LOGO_B64} alt="Korovka" style={{ width: 140, objectFit: 'contain' }} />
+                  <div style={{ fontSize: 10.5, color: '#aaa', marginTop: 2 }}>¡Gracias por tu preferencia!</div>
                 </div>
               </div>
             </div>
