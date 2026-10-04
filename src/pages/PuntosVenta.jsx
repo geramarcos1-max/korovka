@@ -85,7 +85,7 @@ export default function PuntosVenta() {
         oc_url = urlData.publicUrl
       }
       const subtotal = f.items.reduce((s, i) => s + Number(i.cantidad) * Number(i.precio_unitario), 0)
-      const iva = subtotal * 0.16
+      const iva = f.conIva ? subtotal * 0.16 : 0
       const total = subtotal + iva
       const { data: ent, error: e1 } = await supabase.from('pv_entregas').insert({
         folio: f.folio,
@@ -280,7 +280,7 @@ export default function PuntosVenta() {
         <div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
             <button className="btn btn-amber" onClick={() => setEntregaModal({
-              folio: folio(), cliente_id: '', fecha: today(), items: [{ producto_id: '', cantidad: 1, precio_unitario: 0 }], notas: '', ocFile: null,
+              folio: folio(), cliente_id: '', fecha: today(), conIva: true, items: [{ producto_id: '', cantidad: 1, precio_unitario: 0 }], notas: '', ocFile: null,
             })}>+ Nueva entrega</button>
           </div>
           <table className="data-table">
@@ -407,7 +407,8 @@ export default function PuntosVenta() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
             <div>
               <label className="form-label">Folio</label>
-              <input className="form-input" value={entregaModal.folio} readOnly style={{ background: '#f5f5f5' }} />
+              <input className="form-input" value={entregaModal.folio}
+                onChange={e => setEntregaModal(m => ({ ...m, folio: e.target.value.toUpperCase() }))} />
             </div>
             <div>
               <label className="form-label">Fecha</label>
@@ -421,9 +422,26 @@ export default function PuntosVenta() {
               </select>
             </div>
             <div style={{ gridColumn: '1/-1' }}>
-              <label className="form-label">Orden de compra (PDF)</label>
-              <input type="file" accept=".pdf,.png,.jpg,.jpeg" className="form-input"
-                onChange={e => setEntregaModal(m => ({ ...m, ocFile: e.target.files[0] || null }))} />
+              <label className="form-label">Orden de compra</label>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                border: '1px solid var(--bdr)', borderRadius: 8, cursor: 'pointer',
+                background: entregaModal.ocFile ? 'var(--forest-s)' : 'var(--cream-d)',
+                transition: 'background .15s',
+              }}>
+                <input type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display: 'none' }}
+                  onChange={e => setEntregaModal(m => ({ ...m, ocFile: e.target.files[0] || null }))} />
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={entregaModal.ocFile ? 'var(--forest)' : 'var(--txt3)'} strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                <span style={{ fontSize: 13, color: entregaModal.ocFile ? 'var(--forest)' : 'var(--txt3)', fontWeight: entregaModal.ocFile ? 600 : 400 }}>
+                  {entregaModal.ocFile ? entregaModal.ocFile.name : 'Seleccionar archivo PDF o imagen…'}
+                </span>
+                {entregaModal.ocFile && (
+                  <span onClick={e => { e.preventDefault(); setEntregaModal(m => ({ ...m, ocFile: null })) }}
+                    style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--txt3)', cursor: 'pointer', padding: '0 4px' }}>✕</span>
+                )}
+              </label>
             </div>
           </div>
 
@@ -449,14 +467,36 @@ export default function PuntosVenta() {
                   onClick={() => setEntregaModal(m => ({ ...m, items: m.items.filter((_, i) => i !== idx) }))}>×</button>
               </div>
             ))}
-            {/* Subtotal */}
+            {/* Toggle IVA + totales */}
             {entregaModal.items.length > 0 && (() => {
               const sub = entregaModal.items.reduce((s, i) => s + Number(i.cantidad || 0) * Number(i.precio_unitario || 0), 0)
+              const iva = entregaModal.conIva ? sub * 0.16 : 0
               return (
-                <div style={{ textAlign: 'right', fontSize: 13, marginTop: 6 }}>
-                  <span style={{ color: 'var(--txt2)' }}>Subtotal: </span><strong>{fmt(sub)}</strong>
-                  <span style={{ color: 'var(--txt3)', marginLeft: 12 }}>IVA 16%: </span><strong>{fmt(sub * 0.16)}</strong>
-                  <span style={{ color: 'var(--forest)', marginLeft: 12 }}>Total: </span><strong>{fmt(sub * 1.16)}</strong>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
+                  {/* Toggle IVA */}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+                    <div
+                      onClick={() => setEntregaModal(m => ({ ...m, conIva: !m.conIva }))}
+                      style={{
+                        width: 36, height: 20, borderRadius: 99, position: 'relative', cursor: 'pointer',
+                        background: entregaModal.conIva ? 'var(--forest)' : 'var(--bdr2)',
+                        transition: 'background .2s',
+                      }}
+                    >
+                      <div style={{
+                        position: 'absolute', top: 2, left: entregaModal.conIva ? 18 : 2,
+                        width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                        transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)',
+                      }} />
+                    </div>
+                    <span style={{ fontSize: 13, color: 'var(--txt2)', fontWeight: 500 }}>IVA 16%</span>
+                  </label>
+                  {/* Totales */}
+                  <div style={{ fontSize: 13, textAlign: 'right' }}>
+                    <span style={{ color: 'var(--txt2)' }}>Subtotal: </span><strong>{fmt(sub)}</strong>
+                    {entregaModal.conIva && <><span style={{ color: 'var(--txt3)', marginLeft: 12 }}>IVA: </span><strong>{fmt(iva)}</strong></>}
+                    <span style={{ color: 'var(--forest)', marginLeft: 12 }}>Total: </span><strong>{fmt(sub + iva)}</strong>
+                  </div>
                 </div>
               )
             })()}
