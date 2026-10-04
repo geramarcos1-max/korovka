@@ -49,7 +49,7 @@ const titles = {
 }
 
 export default function Layout() {
-  const { profile, signOut } = useAuth()
+  const { profile, user, signOut } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
@@ -59,6 +59,7 @@ export default function Layout() {
     navigate('/login')
   }
 
+  const displayName = profile?.nombre || user?.user_metadata?.nombre || user?.email?.split('@')[0] || 'Usuario'
   const pageTitle = titles[location.pathname] || 'Dashboard'
   const sw = collapsed ? 64 : 240
 
@@ -117,10 +118,10 @@ export default function Layout() {
           <div style={{ padding: '14px 20px 20px', borderTop: '1px solid rgba(255,255,255,.10)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(246,239,223,.20)', color: '#F6EFDF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
-                {(profile?.nombre || 'U')[0].toUpperCase()}
+                {displayName[0].toUpperCase()}
               </div>
               <div>
-                <div style={{ fontSize: 12.5, fontWeight: 500, color: '#F6EFDF', lineHeight: 1.2 }}>{profile?.nombre || 'Usuario'}</div>
+                <div style={{ fontSize: 12.5, fontWeight: 500, color: '#F6EFDF', lineHeight: 1.2 }}>{displayName}</div>
                 <div style={{ fontSize: 10.5, color: 'rgba(246,239,223,.45)', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 500 }}>{profile?.rol}</div>
               </div>
             </div>
@@ -136,7 +137,7 @@ export default function Layout() {
         ) : (
           <div style={{ padding: '14px 0', borderTop: '1px solid rgba(255,255,255,.10)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(246,239,223,.20)', color: '#F6EFDF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }}>
-              {(profile?.nombre || 'U')[0].toUpperCase()}
+              {displayName[0].toUpperCase()}
             </div>
             <button
               onClick={handleSignOut}
