@@ -111,7 +111,7 @@ export default function Inteligencia() {
         const ids = ventasData.map(vt => vt.id)
         const { data: vi } = await supabase
           .from('venta_items')
-          .select('venta_id, producto_id, cantidad, precio_unit')
+          .select('venta_id, producto_id, cantidad, precio_unitario')
           .in('venta_id', ids)
         setVentaItems(vi || [])
       }
@@ -164,7 +164,7 @@ export default function Inteligencia() {
         m[i.producto_id] = { id: i.producto_id, nombre: `Producto ${i.producto_id?.slice(0, 6)}`, unidad: 'pza', cantidad: 0, ingresos: 0 }
       }
       m[i.producto_id].cantidad += Number(i.cantidad || 0)
-      m[i.producto_id].ingresos += Number(i.cantidad || 0) * Number(i.precio_unit || 0)
+      m[i.producto_id].ingresos += Number(i.cantidad || 0) * Number(i.precio_unitario || 0)
     }
     return Object.values(m).filter(p => p.cantidad > 0).sort((a, b) => b.ingresos - a.ingresos)
   }, [productos, ventaItems, ventasFiltradasIds])
