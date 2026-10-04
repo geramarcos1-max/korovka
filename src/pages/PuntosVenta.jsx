@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
 const fmt = n => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n || 0)
@@ -22,6 +22,7 @@ export default function PuntosVenta() {
   const [cobroModal, setCobroModal] = useState(null)
   const [devModal, setDevModal] = useState(null)
   const [clienteModal, setClienteModal] = useState(null)
+  const [deleteModal, setDeleteModal] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -296,6 +297,30 @@ export default function PuntosVenta() {
     setSaving(false)
   }
 
+  // ─── DELETE ITEM ───────────────────────────────────────────
+  async function deleteItem(type, id) {
+    setError('')
+    try {
+      if (type === 'entrega') {
+        await supabase.from('pv_entrega_items').delete().eq('entrega_id', id)
+        await supabase.from('pv_cobros').delete().eq('entrega_id', id)
+        const { error } = await supabase.from('pv_entregas').delete().eq('id', id)
+        if (error) throw error
+      } else if (type === 'devolucion') {
+        await supabase.from('pv_devolucion_items').delete().eq('devolucion_id', id)
+        const { error } = await supabase.from('pv_devoluciones').delete().eq('id', id)
+        if (error) throw error
+      } else if (type === 'cliente') {
+        const { error } = await supabase.from('clientes').update({ activo: false }).eq('id', id)
+        if (error) throw error
+      }
+      setDeleteModal(null)
+      await load()
+    } catch (err) {
+      setError(err.message || 'Error al eliminar')
+    }
+  }
+
   if (loading) return <div style={{ padding: 40, color: 'var(--txt3)', textAlign: 'center' }}>Cargando…</div>
 
   return (
@@ -362,9 +387,14 @@ export default function PuntosVenta() {
               )}
               {entregasConEstado.map(e => (
                 <tr key={e.id} style={{ background: e.esVencida ? '#fef2f2' : undefined }}>
-                  <td style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: 12 }}>
-                    {e.folio}
-                    {e.oc_url && <a href={e.oc_url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, fontSize: 11, color: 'var(--forest)' }}>📄 OC</a>}
+                  <td>
+                    <div style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: 12 }}>{e.folio}</div>
+                    {e.oc_url && (
+                      <a href={e.oc_url} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: 'var(--forest)', display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 3, textDecoration: 'none', background: 'rgba(6,56,49,.08)', borderRadius: 4, padding: '1px 6px', fontWeight: 500 }}>
+                        <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        OC
+                      </a>
+                    )}
                   </td>
                   <td>{e.cliente?.nombre || '—'}</td>
                   <td>{fmtDate(e.fecha)}</td>
@@ -398,6 +428,7 @@ export default function PuntosVenta() {
                         estado: e.estado, notas: e.notas || '', oc_url: e.oc_url, ocFile: null,
                         editMode: true,
                       })}>Editar</button>
+                      <button className="btn btn-ghost btn-sm" style={{ color: '#dc2626', borderColor: '#fca5a5' }} onClick={() => setDeleteModal({ type: 'entrega', id: e.id, label: e.folio })}>Eliminar</button>
                     </div>
                   </td>
                 </tr>
@@ -446,6 +477,7 @@ export default function PuntosVenta() {
                         fecha: d.fecha, motivo: d.motivo, notas: d.notas || '',
                         items: [], pv_entrega_items: [],
                       })}>Editar</button>
+                      <button className="btn btn-ghost btn-sm" style={{ color: '#dc2626', borderColor: '#fca5a5' }} onClick={() => setDeleteModal({ type: 'devolucion', id: d.id, label: d.entrega?.folio || 'Devolución' })}>Eliminar</button>
                     </div>
                   </td>
                 </tr>
@@ -476,11 +508,14 @@ export default function PuntosVenta() {
                   <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{c.rfc || '—'}</td>
                   <td>{c.direccion || '—'}</td>
                   <td>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setClienteModal({
-                      id: c.id, editMode: true,
-                      nombre: c.nombre, contacto: c.contacto || '', telefono: c.telefono || '',
-                      email: c.email || '', rfc: c.rfc || '', direccion: c.direccion || '',
-                    })}>Editar</button>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setClienteModal({
+                        id: c.id, editMode: true,
+                        nombre: c.nombre, contacto: c.contacto || '', telefono: c.telefono || '',
+                        email: c.email || '', rfc: c.rfc || '', direccion: c.direccion || '',
+                      })}>Editar</button>
+                      <button className="btn btn-ghost btn-sm" style={{ color: '#dc2626', borderColor: '#fca5a5' }} onClick={() => setDeleteModal({ type: 'cliente', id: c.id, label: c.nombre })}>Eliminar</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -750,6 +785,81 @@ export default function PuntosVenta() {
             </button>
           </div>
         </ModalOverlay>
+      )}
+
+      {/* ─── MODAL: ELIMINAR ─────────────────────────────────── */}
+      {deleteModal && (
+        <ModalOverlay onClose={() => setDeleteModal(null)}>
+          <h3 style={{ margin: '0 0 6px', fontSize: 17, fontWeight: 700, color: '#dc2626' }}>
+            {deleteModal.type === 'entrega' ? 'Eliminar entrega' : deleteModal.type === 'devolucion' ? 'Eliminar devolución' : 'Desactivar cliente'}
+          </h3>
+          <p style={{ fontSize: 13, color: 'var(--txt2)', margin: '0 0 14px' }}>
+            {deleteModal.type === 'cliente' ? 'El cliente quedará inactivo y no aparecerá en nuevas entregas.' : 'Esta acción eliminará el registro de forma permanente.'}
+          </p>
+          <div style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 13, color: 'var(--forest)', background: 'var(--bg)', borderRadius: 6, padding: '6px 10px', marginBottom: 18 }}>{deleteModal.label}</div>
+          <SliderConfirm
+            onConfirm={() => deleteItem(deleteModal.type, deleteModal.id)}
+            onCancel={() => setDeleteModal(null)}
+          />
+        </ModalOverlay>
+      )}
+    </div>
+  )
+}
+
+function SliderConfirm({ onConfirm, onCancel }) {
+  const [px, setPx] = useState(0)
+  const [done, setDone] = useState(false)
+  const trackRef = useRef(null)
+  const dragging = useRef(false)
+
+  function start(e) {
+    dragging.current = true
+    e.preventDefault()
+  }
+
+  function move(e) {
+    if (!dragging.current || !trackRef.current || done) return
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX
+    const rect = trackRef.current.getBoundingClientRect()
+    const thumbSize = 40
+    const pad = 4
+    const maxPx = rect.width - thumbSize - pad * 2
+    const rawPx = clientX - rect.left - thumbSize / 2
+    const clamped = Math.max(0, Math.min(maxPx, rawPx))
+    setPx(clamped)
+    if (clamped >= maxPx * 0.88) {
+      setDone(true)
+      dragging.current = false
+      setTimeout(onConfirm, 350)
+    }
+  }
+
+  function end() {
+    if (!done) { dragging.current = false; setPx(0) }
+  }
+
+  return (
+    <div>
+      <div ref={trackRef}
+        onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
+        onTouchStart={start} onTouchMove={move} onTouchEnd={end}
+        style={{ position: 'relative', height: 48, borderRadius: 24, background: done ? '#dc2626' : '#fee2e2', border: `1px solid ${done ? '#dc2626' : '#fca5a5'}`, cursor: done ? 'default' : 'grab', userSelect: 'none', overflow: 'hidden' }}>
+        {/* fill */}
+        {!done && <div style={{ position: 'absolute', left: 4, top: 4, bottom: 4, width: px, background: '#fca5a5', borderRadius: 16, pointerEvents: 'none' }} />}
+        {/* thumb */}
+        <div style={{ position: 'absolute', top: 4, left: 4 + px, width: 40, height: 40, borderRadius: '50%', background: 'white', boxShadow: '0 1px 5px rgba(0,0,0,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', fontSize: 18, fontWeight: 700, pointerEvents: 'none', transition: dragging.current ? 'none' : 'left .25s' }}>
+          {done ? '✓' : '›'}
+        </div>
+        {/* label */}
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingLeft: 52, fontSize: 13, fontWeight: 500, color: done ? 'white' : '#b91c1c', pointerEvents: 'none' }}>
+          {done ? 'Eliminando…' : 'Desliza para confirmar'}
+        </div>
+      </div>
+      {!done && (
+        <div style={{ textAlign: 'center', marginTop: 10 }}>
+          <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancelar</button>
+        </div>
       )}
     </div>
   )
