@@ -92,6 +92,28 @@ function PagoEstado({ f, setF, personas }) {
           </select>
         </div>
       )}
+      {f.metodo_pago === 'transferencia' && (
+        <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">¿A quién se transfirió?</label>
+            <select className="form-select" value={f.beneficiario_transferencia || ''} onChange={e => setF(x => ({ ...x, beneficiario_transferencia: e.target.value }))}>
+              <option value="">— Seleccionar —</option>
+              {['Caro', 'Fer', 'Gera', 'Kseniya'].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Comprobante de pago <span style={{ color: 'var(--txt3)', fontWeight: 400 }}>(imagen)</span></label>
+            {f.comprobante_url && !f.comprobante_file && (
+              <a href={f.comprobante_url} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: 12, color: 'var(--forest)', marginBottom: 6 }}>Ver comprobante actual</a>
+            )}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', border: '1px dashed var(--bdr2)', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', fontSize: 13, color: 'var(--txt2)' }}>
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              {f.comprobante_file ? f.comprobante_file.name : 'Seleccionar imagen…'}
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => setF(x => ({ ...x, comprobante_file: e.target.files[0] || null }))} />
+            </label>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -274,7 +296,7 @@ export default function Ventas() {
     cliente_id: '', punto_id: '',
     fecha: new Date().toISOString().slice(0, 10),
     notas: '', con_iva: true, estado: 'pendiente', metodo_pago: 'efectivo',
-    cobrado_por: '',
+    cobrado_por: '', beneficiario_transferencia: '', comprobante_file: null, comprobante_url: '',
   }
   const [form, setForm] = useState(emptyForm)
   const [items, setItems] = useState([{ producto_id: '', cantidad: 1, precio_unitario: '' }])
@@ -370,6 +392,7 @@ export default function Ventas() {
       fecha: v.fecha, notas: v.notas || '',
       con_iva: v.iva > 0, estado: v.estado, metodo_pago: v.metodo_pago || 'efectivo',
       cobrado_por: v.cobrado_por || '',
+      beneficiario_transferencia: v.beneficiario_transferencia || '', comprobante_file: null, comprobante_url: v.comprobante_url || '',
     })
     setEditItems((vitems || []).map(i => ({ producto_id: i.producto_id, cantidad: i.cantidad, precio_unitario: i.precio_unitario })))
     setErrEdit('')
@@ -384,12 +407,22 @@ export default function Ventas() {
     const cxcEstado = editForm.estado === 'pagada' ? 'pagada' : 'pendiente'
     const cxcPagado = editForm.estado === 'pagada' ? totalE : 0
 
+    let comprobante_url_edit = editForm.comprobante_url || null
+    if (editForm.comprobante_file) {
+      const ext = editForm.comprobante_file.name.split('.').pop()
+      const path = `${editingVenta.folio}-comp.${ext}`
+      await supabase.storage.from('comprobantes').upload(path, editForm.comprobante_file, { upsert: true })
+      const { data: urlData } = supabase.storage.from('comprobantes').getPublicUrl(path)
+      comprobante_url_edit = urlData.publicUrl
+    }
     await supabase.from('ventas').update({
       cliente_id: clienteIdReal, punto_id: editForm.punto_id || null,
       fecha: editForm.fecha, notas: editForm.notas,
       subtotal: subtotalE, iva: ivaE, total: totalE,
       estado: editForm.estado, metodo_pago: editForm.metodo_pago,
       cobrado_por: editForm.cobrado_por || null,
+      beneficiario_transferencia: editForm.metodo_pago === 'transferencia' ? (editForm.beneficiario_transferencia || null) : null,
+      comprobante_url: comprobante_url_edit,
     }).eq('id', editingVenta.id)
 
     await supabase.from('venta_items').delete().eq('venta_id', editingVenta.id)
@@ -429,11 +462,21 @@ export default function Ventas() {
     if (items.some(i => !i.producto_id || !i.cantidad || !i.precio_unitario)) { setErr('Completa todos los productos.'); return }
     setSaving(true)
     const clienteIdReal = esParticular ? null : form.cliente_id
+    let comprobante_url = form.comprobante_url || null
+    if (form.comprobante_file) {
+      const ext = form.comprobante_file.name.split('.').pop()
+      const path = `${folio('COMP')}.${ext}`
+      await supabase.storage.from('comprobantes').upload(path, form.comprobante_file, { upsert: true })
+      const { data: urlData } = supabase.storage.from('comprobantes').getPublicUrl(path)
+      comprobante_url = urlData.publicUrl
+    }
     const { data: venta, error } = await supabase.from('ventas').insert({
       folio: folio('VD'), tipo: 'directa', cliente_id: clienteIdReal,
       punto_id: form.punto_id || null, fecha: form.fecha, subtotal, iva, total,
       notas: form.notas, estado: form.estado, metodo_pago: form.metodo_pago, creado_por: profile?.id,
       cobrado_por: form.cobrado_por || null,
+      beneficiario_transferencia: form.metodo_pago === 'transferencia' ? (form.beneficiario_transferencia || null) : null,
+      comprobante_url,
     }).select().single()
     if (error) { setSaving(false); setErr(error.message); return }
     await supabase.from('venta_items').insert(items.map(i => ({
