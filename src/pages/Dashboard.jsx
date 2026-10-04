@@ -175,9 +175,7 @@ export default function Dashboard() {
           <div className="card-title">Cobrado x transferencia</div>
           <div className="kpi-val" style={{ color: '#0284c7' }}>{fmt(kpis.transferenciaVentas)}</div>
           <div style={{ marginTop: 6 }}>
-            <span style={{ fontSize: 12, color: 'var(--txt3)' }}>
-              Efectivo + Transferencia: <strong style={{ color: 'var(--txt2)' }}>{fmt(kpis.efectivoVentas + kpis.transferenciaVentas)}</strong>
-            </span>
+            <span style={{ fontSize: 12, color: 'var(--txt3)' }}>ventas cobradas por transferencia</span>
           </div>
         </div>
       </div>
