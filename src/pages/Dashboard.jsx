@@ -42,6 +42,9 @@ export default function Dashboard() {
     ventasMes: 0,
     pendienteCobro: 0,
     consignacionesActivas: 0,
+    efectivoVentas: 0,
+    transferenciaVentas: 0,
+    cortesCaja: 0,
   })
   const [regalados, setRegalados] = useState({ unidades: 0, valor: 0 })
   const [degustacion, setDegustacion] = useState({ unidades: 0, valor: 0 })
@@ -63,6 +66,9 @@ export default function Dashboard() {
         { data: vDegust },
         { data: prods },
         { data: movs },
+        { data: vEfectivo },
+        { data: vTransferencia },
+        { data: cortesMovs },
       ] = await Promise.all([
         supabase.from('ventas').select('total').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
         supabase.from('ventas').select('total').gte('fecha', mesInicio).in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
@@ -73,16 +79,26 @@ export default function Dashboard() {
         supabase.from('ventas').select('subtotal, venta_items(cantidad)').eq('estado', 'degustacion'),
         supabase.from('productos').select('id, nombre, unidad, precio_base').eq('activo', true).order('nombre'),
         supabase.from('movimientos_inventario').select('producto_id, cantidad'),
+        supabase.from('ventas').select('total').eq('metodo_pago', 'efectivo').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
+        supabase.from('ventas').select('total').eq('metodo_pago', 'transferencia').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
+        supabase.from('caja_movimientos').select('monto').eq('tipo', 'transferencia_salida').eq('referencia_tipo', 'corte_caja'),
       ])
 
       const sumTotal = arr => arr?.reduce((a, r) => a + Number(r.total || 0), 0) || 0
       const sumPend  = arr => arr?.reduce((a, r) => a + Number(r.monto_total || 0) - Number(r.monto_pagado || 0), 0) || 0
+
+      const efectivoVentas     = sumTotal(vEfectivo)
+      const transferenciaVentas = sumTotal(vTransferencia)
+      const cortesCaja          = Math.abs((cortesMovs || []).reduce((a, m) => a + Number(m.monto || 0), 0))
 
       setKpis({
         ventasTotales: sumTotal(vTotales),
         ventasMes: sumTotal(vMes),
         pendienteCobro: sumPend(cxc),
         consignacionesActivas: cons?.length || 0,
+        efectivoVentas,
+        transferenciaVentas,
+        cortesCaja,
       })
 
       const regUnidades = (vRegaladas || []).reduce((a, v) => a + (v.venta_items || []).reduce((b, i) => b + Number(i.cantidad || 0), 0), 0)
@@ -138,6 +154,32 @@ export default function Dashboard() {
           sub="entregas sin liquidar"
           accent="#7c3aed"
         />
+      </div>
+
+      <div className="grid-4" style={{ marginBottom: 20 }}>
+        <div className="card" style={{ borderTop: '3px solid #16a34a', gridColumn: 'span 2' }}>
+          <div className="card-title">Efectivo en caja</div>
+          <div className="kpi-val" style={{ color: '#16a34a' }}>{fmt(kpis.efectivoVentas - kpis.cortesCaja)}</div>
+          <div style={{ display: 'flex', gap: 16, marginTop: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: 'var(--txt3)' }}>
+              Ventas efectivo: <strong style={{ color: 'var(--txt2)' }}>{fmt(kpis.efectivoVentas)}</strong>
+            </span>
+            {kpis.cortesCaja > 0 && (
+              <span style={{ fontSize: 12, color: 'var(--txt3)' }}>
+                Cortes entregados: <strong style={{ color: 'var(--red-t)' }}>−{fmt(kpis.cortesCaja)}</strong>
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="card" style={{ borderTop: '3px solid #0284c7', gridColumn: 'span 2' }}>
+          <div className="card-title">Cobrado x transferencia</div>
+          <div className="kpi-val" style={{ color: '#0284c7' }}>{fmt(kpis.transferenciaVentas)}</div>
+          <div style={{ marginTop: 6 }}>
+            <span style={{ fontSize: 12, color: 'var(--txt3)' }}>
+              Efectivo + Transferencia: <strong style={{ color: 'var(--txt2)' }}>{fmt(kpis.efectivoVentas + kpis.transferenciaVentas)}</strong>
+            </span>
+          </div>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
