@@ -5,8 +5,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Ventas from './pages/Ventas'
 import Inventario from './pages/Inventario'
-import Consignacion from './pages/Consignacion'
-import CxC from './pages/CxC'
+import PuntosVenta from './pages/PuntosVenta'
 import Productos from './pages/Productos'
 import Clientes from './pages/Clientes'
 import Puntos from './pages/Puntos'
@@ -29,8 +28,7 @@ function AppRoutes() {
         <Route index element={<Dashboard />} />
         <Route path="ventas" element={<Ventas />} />
         <Route path="inventario" element={<Inventario />} />
-        <Route path="consignacion" element={<Consignacion />} />
-        <Route path="cxc" element={<CxC />} />
+        <Route path="puntos-venta" element={<PuntosVenta />} />
         <Route path="productos" element={<Productos />} />
         <Route path="clientes" element={<Clientes />} />
         <Route path="puntos" element={<Puntos />} />
