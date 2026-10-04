@@ -75,7 +75,6 @@ export default function PuntosVenta() {
     setSaving(true)
     setError('')
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       let oc_url = null
       if (f.ocFile) {
         const ext = f.ocFile.name.split('.').pop()
@@ -100,7 +99,6 @@ export default function PuntosVenta() {
         oc_url,
         notas: f.notas || null,
         estado: 'pendiente',
-        creado_por: user.id,
       }).select().single()
       if (e1) throw e1
       await supabase.from('pv_entrega_items').insert(
