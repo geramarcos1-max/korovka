@@ -7,8 +7,6 @@ import Ventas from './pages/Ventas'
 import Inventario from './pages/Inventario'
 import PuntosVenta from './pages/PuntosVenta'
 import Productos from './pages/Productos'
-import Clientes from './pages/Clientes'
-import Puntos from './pages/Puntos'
 import Caja from './pages/Caja'
 import OdcInterna from './pages/OdcInterna'
 
@@ -30,8 +28,6 @@ function AppRoutes() {
         <Route path="inventario" element={<Inventario />} />
         <Route path="puntos-venta" element={<PuntosVenta />} />
         <Route path="productos" element={<Productos />} />
-        <Route path="clientes" element={<Clientes />} />
-        <Route path="puntos" element={<Puntos />} />
         <Route path="caja" element={<Caja />} />
         <Route path="odc-interna" element={<OdcInterna />} />
       </Route>

@@ -11,8 +11,6 @@ const nav = [
   { label: 'CATÁLOGOS', type: 'label' },
   { to: '/inventario', label: 'Inventario', icon: '📊' },
   { to: '/productos', label: 'Productos', icon: '🧀' },
-  { to: '/clientes', label: 'Clientes', icon: '🏪' },
-  { to: '/puntos', label: 'Puntos de Distrib.', icon: '📍' },
 ]
 
 const titles = {
@@ -23,8 +21,6 @@ const titles = {
   '/odc-interna': 'ODC Interna',
   '/inventario': 'Inventario',
   '/productos': 'Productos',
-  '/clientes': 'Clientes',
-  '/puntos': 'Puntos de Distribución',
 }
 
 export default function Layout() {
