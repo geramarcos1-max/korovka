@@ -62,25 +62,36 @@ function IVAResumen({ sub, iv, tot, conIva, onToggle }) {
   )
 }
 
-function PagoEstado({ f, setF }) {
+function PagoEstado({ f, setF, personas }) {
   return (
-    <div className="form-row" style={{ marginTop: 12 }}>
-      <div className="form-group" style={{ marginBottom: 0 }}>
-        <label className="form-label">Método de pago</label>
-        <select className="form-select" value={f.metodo_pago} onChange={e => setF(x => ({ ...x, metodo_pago: e.target.value }))}>
-          <option value="efectivo">Efectivo</option>
-          <option value="transferencia">Transferencia</option>
-        </select>
+    <div style={{ marginTop: 12 }}>
+      <div className="form-row">
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label className="form-label">Método de pago</label>
+          <select className="form-select" value={f.metodo_pago} onChange={e => setF(x => ({ ...x, metodo_pago: e.target.value }))}>
+            <option value="efectivo">Efectivo</option>
+            <option value="transferencia">Transferencia</option>
+          </select>
+        </div>
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label className="form-label">Estado</label>
+          <select className="form-select" value={f.estado} onChange={e => setF(x => ({ ...x, estado: e.target.value }))}>
+            <option value="pendiente">Pendiente</option>
+            <option value="pagada">Pagada</option>
+            <option value="degustacion">Degustación</option>
+            <option value="regalado">Regalado</option>
+          </select>
+        </div>
       </div>
-      <div className="form-group" style={{ marginBottom: 0 }}>
-        <label className="form-label">Estado</label>
-        <select className="form-select" value={f.estado} onChange={e => setF(x => ({ ...x, estado: e.target.value }))}>
-          <option value="pendiente">Pendiente</option>
-          <option value="pagada">Pagada</option>
-          <option value="degustacion">Degustación</option>
-          <option value="regalado">Regalado</option>
-        </select>
-      </div>
+      {f.metodo_pago === 'efectivo' && f.estado === 'pagada' && personas.length > 0 && (
+        <div className="form-group" style={{ marginTop: 10 }}>
+          <label className="form-label">¿Quién cobró? <span style={{ color: 'var(--txt3)', fontWeight: 400 }}>(registra en caja)</span></label>
+          <select className="form-select" value={f.cobrado_por || ''} onChange={e => setF(x => ({ ...x, cobrado_por: e.target.value }))}>
+            <option value="">— Sin asignar —</option>
+            {personas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          </select>
+        </div>
+      )}
     </div>
   )
 }
@@ -242,6 +253,7 @@ export default function Ventas() {
   const [clientes, setClientes] = useState([])
   const [puntos, setPuntos] = useState([])
   const [productos, setProductos] = useState([])
+  const [personas, setPersonas] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
   const [editModal, setEditModal] = useState(false)
@@ -262,6 +274,7 @@ export default function Ventas() {
     cliente_id: '', punto_id: '',
     fecha: new Date().toISOString().slice(0, 10),
     notas: '', con_iva: true, estado: 'pendiente', metodo_pago: 'efectivo',
+    cobrado_por: '',
   }
   const [form, setForm] = useState(emptyForm)
   const [items, setItems] = useState([{ producto_id: '', cantidad: 1, precio_unitario: '' }])
@@ -271,16 +284,18 @@ export default function Ventas() {
   const [errEdit, setErrEdit] = useState('')
 
   async function load() {
-    const [{ data: v }, { data: c }, { data: p }, { data: pr }] = await Promise.all([
+    const [{ data: v }, { data: c }, { data: p }, { data: pr }, { data: per }] = await Promise.all([
       supabase.from('ventas').select('*, clientes(nombre), venta_items(cantidad, productos(nombre))').order('created_at', { ascending: false }).limit(200),
       supabase.from('clientes').select('id, nombre, rfc, direccion').eq('activo', true).order('nombre'),
       supabase.from('puntos_distribucion').select('id, nombre, modelo').eq('activo', true).eq('modelo', 'directa').order('nombre'),
       supabase.from('productos').select('id, nombre, precio_base, unidad').eq('activo', true).order('nombre'),
+      supabase.from('personas_caja').select('id, nombre').eq('activo', true).order('nombre'),
     ])
     setVentas(v || [])
     setClientes(c || [])
     setPuntos(p || [])
     setProductos(pr || [])
+    setPersonas(per || [])
     setLoading(false)
   }
 
@@ -354,6 +369,7 @@ export default function Ventas() {
       punto_id: v.punto_id || '',
       fecha: v.fecha, notas: v.notas || '',
       con_iva: v.iva > 0, estado: v.estado, metodo_pago: v.metodo_pago || 'efectivo',
+      cobrado_por: v.cobrado_por || '',
     })
     setEditItems((vitems || []).map(i => ({ producto_id: i.producto_id, cantidad: i.cantidad, precio_unitario: i.precio_unitario })))
     setErrEdit('')
@@ -373,6 +389,7 @@ export default function Ventas() {
       fecha: editForm.fecha, notas: editForm.notas,
       subtotal: subtotalE, iva: ivaE, total: totalE,
       estado: editForm.estado, metodo_pago: editForm.metodo_pago,
+      cobrado_por: editForm.cobrado_por || null,
     }).eq('id', editingVenta.id)
 
     await supabase.from('venta_items').delete().eq('venta_id', editingVenta.id)
@@ -381,6 +398,14 @@ export default function Ventas() {
       cantidad: Number(i.cantidad), precio_unitario: Number(i.precio_unitario),
       subtotal: Number(i.cantidad) * Number(i.precio_unitario),
     })))
+    await supabase.from('caja_movimientos').delete().eq('referencia_id', editingVenta.id).eq('referencia_tipo', 'venta').eq('tipo', 'cobro_venta')
+    if (editForm.metodo_pago === 'efectivo' && editForm.estado === 'pagada' && editForm.cobrado_por) {
+      await supabase.from('caja_movimientos').insert({
+        persona_id: editForm.cobrado_por, tipo: 'cobro_venta', monto: totalE,
+        concepto: 'Cobro venta ' + editingVenta.folio,
+        referencia_id: editingVenta.id, referencia_tipo: 'venta', creado_por: profile?.id,
+      })
+    }
     await supabase.from('movimientos_inventario').delete().eq('referencia_id', editingVenta.id).eq('referencia_tipo', 'venta')
     await supabase.from('movimientos_inventario').insert(editItems.map(i => ({
       producto_id: i.producto_id, tipo: 'salida', cantidad: -Number(i.cantidad),
@@ -408,6 +433,7 @@ export default function Ventas() {
       folio: folio('VD'), tipo: 'directa', cliente_id: clienteIdReal,
       punto_id: form.punto_id || null, fecha: form.fecha, subtotal, iva, total,
       notas: form.notas, estado: form.estado, metodo_pago: form.metodo_pago, creado_por: profile?.id,
+      cobrado_por: form.cobrado_por || null,
     }).select().single()
     if (error) { setSaving(false); setErr(error.message); return }
     await supabase.from('venta_items').insert(items.map(i => ({
@@ -420,6 +446,13 @@ export default function Ventas() {
         venta_id: venta.id, cliente_id: clienteIdReal, monto_total: total,
         monto_pagado: form.estado === 'pagada' ? total : 0,
         estado: form.estado === 'pagada' ? 'pagada' : 'pendiente',
+      })
+    }
+    if (form.metodo_pago === 'efectivo' && form.estado === 'pagada' && form.cobrado_por) {
+      await supabase.from('caja_movimientos').insert({
+        persona_id: form.cobrado_por, tipo: 'cobro_venta', monto: total,
+        concepto: 'Cobro venta ' + venta.folio,
+        referencia_id: venta.id, referencia_tipo: 'venta', creado_por: profile?.id,
       })
     }
     await supabase.from('movimientos_inventario').insert(items.map(i => ({
@@ -559,7 +592,7 @@ export default function Ventas() {
               <ModalCampos f={form} setF={setForm} esP={esParticular} clientes={clientes} puntos={puntos} />
               <ProductosForm its={items} onAdd={addItem} onRemove={removeItem} onUpd={updateItem} productos={productos} />
               <IVAResumen sub={subtotal} iv={iva} tot={total} conIva={form.con_iva} onToggle={() => setForm(f => ({ ...f, con_iva: !f.con_iva }))} />
-              <PagoEstado f={form} setF={setForm} />
+              <PagoEstado f={form} setF={setForm} personas={personas} />
               {err && <div style={{ color: 'var(--red)', fontSize: 13, marginTop: 8 }}>{err}</div>}
             </div>
             <div className="modal-foot">
@@ -581,7 +614,7 @@ export default function Ventas() {
               <ModalCampos f={editForm} setF={setEditForm} esP={esParticularE} clientes={clientes} puntos={puntos} />
               <ProductosForm its={editItems} onAdd={addEditItem} onRemove={removeEditItem} onUpd={updateEditItem} productos={productos} />
               <IVAResumen sub={subtotalE} iv={ivaE} tot={totalE} conIva={editForm.con_iva} onToggle={() => setEditForm(f => ({ ...f, con_iva: !f.con_iva }))} />
-              <PagoEstado f={editForm} setF={setEditForm} />
+              <PagoEstado f={editForm} setF={setEditForm} personas={personas} />
               {errEdit && <div style={{ color: 'var(--red)', fontSize: 13, marginTop: 8 }}>{errEdit}</div>}
             </div>
             <div className="modal-foot">

@@ -10,7 +10,7 @@ import CxC from './pages/CxC'
 import Productos from './pages/Productos'
 import Clientes from './pages/Clientes'
 import Puntos from './pages/Puntos'
-import Gastos from './pages/Gastos'
+import Caja from './pages/Caja'
 import OdcInterna from './pages/OdcInterna'
 
 function PrivateRoute({ children }) {
@@ -34,7 +34,7 @@ function AppRoutes() {
         <Route path="productos" element={<Productos />} />
         <Route path="clientes" element={<Clientes />} />
         <Route path="puntos" element={<Puntos />} />
-        <Route path="gastos" element={<Gastos />} />
+        <Route path="caja" element={<Caja />} />
         <Route path="odc-interna" element={<OdcInterna />} />
       </Route>
     </Routes>

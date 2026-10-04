@@ -171,6 +171,30 @@ CREATE TABLE IF NOT EXISTS odc_interna_items (
   notas TEXT
 );
 
+-- ─── PERSONAS DE CAJA ──────────────────────────────────────
+CREATE TABLE IF NOT EXISTS personas_caja (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  nombre TEXT NOT NULL,
+  activo BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- ─── MOVIMIENTOS DE CAJA ────────────────────────────────────
+CREATE TABLE IF NOT EXISTS caja_movimientos (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  persona_id UUID REFERENCES personas_caja(id),
+  tipo TEXT NOT NULL CHECK (tipo IN ('cobro_venta', 'gasto', 'transferencia_entrada', 'transferencia_salida', 'ajuste')),
+  monto NUMERIC(10,2) NOT NULL,
+  concepto TEXT NOT NULL,
+  referencia_id UUID,
+  referencia_tipo TEXT,
+  creado_por UUID REFERENCES profiles(id),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Columna cobrado_por en ventas
+ALTER TABLE ventas ADD COLUMN IF NOT EXISTS cobrado_por UUID REFERENCES personas_caja(id);
+
 -- ─── ETIQUETAS DE PRODUCTOS ─────────────────────────────────
 CREATE TABLE IF NOT EXISTS etiquetas_inventario (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -210,6 +234,10 @@ CREATE POLICY "auth" ON consignacion_liquidaciones FOR ALL TO authenticated USIN
 CREATE POLICY "auth" ON consignacion_liquidacion_items FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "auth" ON movimientos_inventario FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "auth" ON cuentas_por_cobrar FOR ALL TO authenticated USING (true) WITH CHECK (true);
+ALTER TABLE personas_caja ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "auth" ON personas_caja FOR ALL TO authenticated USING (true) WITH CHECK (true);
+ALTER TABLE caja_movimientos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "auth" ON caja_movimientos FOR ALL TO authenticated USING (true) WITH CHECK (true);
 ALTER TABLE etiquetas_inventario ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "auth" ON etiquetas_inventario FOR ALL TO authenticated USING (true) WITH CHECK (true);
 ALTER TABLE odc_internas ENABLE ROW LEVEL SECURITY;
@@ -237,6 +265,8 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 
 -- ─── DATOS INICIALES ────────────────────────────────────────
+INSERT INTO personas_caja (nombre) VALUES ('Gera'), ('Fernando');
+
 INSERT INTO productos (sku, nombre, unidad, precio_base, costo) VALUES
   ('QCH-1KG',  'Queso Chihuahua 1 kg',   'pieza', 180.00, 95.00),
   ('QCH-500G', 'Queso Chihuahua 500 g',  'pieza',  95.00, 50.00),
