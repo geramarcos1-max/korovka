@@ -201,7 +201,9 @@ export default function Caja() {
 
   const totalGeneral = balances.reduce((a, b) => a + b.saldo, 0)
 
-  const gastos = useMemo(() => movimientos.filter(m => m.tipo === 'gasto'), [movimientos])
+  // Propósitos de transferencia — nunca deben aparecer como gasto
+  const TRANS_PROPS = ['corte_caja', 'reembolso_gasto', 'reparto_ganancias']
+  const gastos = useMemo(() => movimientos.filter(m => m.tipo === 'gasto' && !TRANS_PROPS.includes(m.referencia_tipo)), [movimientos])
   const inversiones = useMemo(() => gastos.filter(g => g.referencia_tipo === 'inversion'), [gastos])
   const soloGastos  = useMemo(() => gastos.filter(g => g.referencia_tipo !== 'inversion'), [gastos])
 
@@ -405,7 +407,7 @@ export default function Caja() {
                   {fmtSigned(p.saldo)}
                 </div>
                 <div className="kpi-sub">
-                  {movimientos.filter(m => m.persona_id === p.id).length} movimientos
+                  {gastos.filter(g => g.persona_id === p.id).length} gastos · {movimientos.filter(m => m.persona_id === p.id && m.tipo === 'cobro_venta').length} cobros
                 </div>
               </div>
             ))}
