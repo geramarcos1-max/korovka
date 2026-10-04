@@ -91,20 +91,25 @@ export default function Inteligencia() {
     async function load() {
       const [
         { data: v },
-        { data: vi },
         { data: p },
         { data: d },
         { data: di },
       ] = await Promise.all([
-        supabase.from('ventas').select('id, fecha, total, estado, metodo_pago').not('estado', 'eq', 'cancelada').order('fecha'),
-        supabase.from('venta_items').select('venta_id, producto_id, cantidad, precio_unit'),
-        // Sin filtro activo: incluimos inactivos para cubrir histórico
+        supabase.from('ventas')
+          .select('id, fecha, total, estado, metodo_pago, venta_items(producto_id, cantidad, precio_unit)')
+          .not('estado', 'eq', 'cancelada')
+          .order('fecha'),
         supabase.from('productos').select('id, nombre, unidad').order('nombre'),
         supabase.from('pv_devoluciones').select('id, fecha, motivo, notas').order('fecha', { ascending: false }).limit(300),
         supabase.from('pv_devolucion_items').select('devolucion_id, producto_id, cantidad'),
       ])
-      setVentas(v || [])
-      setVentaItems(vi || [])
+      const ventasData = v || []
+      setVentas(ventasData)
+      // Flatten venta_items from the join
+      const flatItems = ventasData.flatMap(venta =>
+        (venta.venta_items || []).map(i => ({ ...i, venta_id: venta.id }))
+      )
+      setVentaItems(flatItems)
       setProductos(p || [])
       setDevoluciones(d || [])
       setDevItems(di || [])
