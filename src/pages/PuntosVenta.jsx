@@ -86,7 +86,8 @@ export default function PuntosVenta() {
       }
       const subtotal = f.items.reduce((s, i) => s + Number(i.cantidad) * Number(i.precio_unitario), 0)
       const iva = f.conIva ? subtotal * 0.16 : 0
-      const total = subtotal + iva
+      const retencion = f.conRetencion ? Number(f.retencion || 0) : 0
+      const total = subtotal + iva - retencion
       const { data: ent, error: e1 } = await supabase.from('pv_entregas').insert({
         folio: f.folio,
         cliente_id: f.cliente_id,
@@ -94,6 +95,7 @@ export default function PuntosVenta() {
         fecha_pago_programada: addDays(f.fecha, 30),
         subtotal,
         iva,
+        retencion,
         total,
         oc_url,
         notas: f.notas || null,
@@ -151,6 +153,7 @@ export default function PuntosVenta() {
         oc_url,
         notas: f.notas || null,
         estado: f.estado,
+        retencion: f.conRetencion ? Number(f.retencion || 0) : 0,
       }).eq('id', f.id)
       if (e1) throw e1
       setEntregaModal(null)
@@ -352,7 +355,8 @@ export default function PuntosVenta() {
         <div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
             <button className="btn btn-amber" onClick={() => setEntregaModal({
-              folio: folio(), cliente_id: '', fecha: today(), conIva: true, items: [{ producto_id: '', cantidad: 1, precio_unitario: 0 }], notas: '', ocFile: null,
+              folio: folio(), cliente_id: '', fecha: today(), conIva: true, conRetencion: false, retencion: '',
+              items: [{ producto_id: '', cantidad: 1, precio_unitario: 0 }], notas: '', ocFile: null,
             })}>+ Nueva entrega</button>
           </div>
           <table className="data-table">
@@ -576,23 +580,47 @@ export default function PuntosVenta() {
                   onClick={() => setEntregaModal(m => ({ ...m, items: m.items.filter((_, i) => i !== idx) }))}>×</button>
               </div>
             ))}
-            {/* Toggle IVA + totales */}
+            {/* Toggles IVA / Retención + totales */}
             {entregaModal.items.length > 0 && (() => {
               const sub = entregaModal.items.reduce((s, i) => s + Number(i.cantidad || 0) * Number(i.precio_unitario || 0), 0)
               const iva = entregaModal.conIva ? sub * 0.16 : 0
+              const ret = entregaModal.conRetencion ? Number(entregaModal.retencion || 0) : 0
+              const total = sub + iva - ret
               return (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
-                    <div onClick={() => setEntregaModal(m => ({ ...m, conIva: !m.conIva }))}
-                      style={{ width: 36, height: 20, borderRadius: 99, position: 'relative', cursor: 'pointer', background: entregaModal.conIva ? 'var(--forest)' : 'var(--bdr2)', transition: 'background .2s' }}>
-                      <div style={{ position: 'absolute', top: 2, left: entregaModal.conIva ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
-                    </div>
-                    <span style={{ fontSize: 13, color: 'var(--txt2)', fontWeight: 500 }}>IVA 16%</span>
-                  </label>
-                  <div style={{ fontSize: 13, textAlign: 'right' }}>
-                    <span style={{ color: 'var(--txt2)' }}>Subtotal: </span><strong>{fmt(sub)}</strong>
-                    {entregaModal.conIva && <><span style={{ color: 'var(--txt3)', marginLeft: 12 }}>IVA: </span><strong>{fmt(iva)}</strong></>}
-                    <span style={{ color: 'var(--forest)', marginLeft: 12 }}>Total: </span><strong>{fmt(sub + iva)}</strong>
+                <div style={{ marginTop: 12, padding: '12px 14px', background: 'var(--cream-d)', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {/* Fila de toggles */}
+                  <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+                    {/* Toggle IVA */}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+                      <div onClick={() => setEntregaModal(m => ({ ...m, conIva: !m.conIva }))}
+                        style={{ width: 36, height: 20, borderRadius: 99, position: 'relative', cursor: 'pointer', background: entregaModal.conIva ? 'var(--forest)' : 'var(--bdr2)', transition: 'background .2s', flexShrink: 0 }}>
+                        <div style={{ position: 'absolute', top: 2, left: entregaModal.conIva ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
+                      </div>
+                      <span style={{ fontSize: 13, color: 'var(--txt2)', fontWeight: 500 }}>IVA 16%</span>
+                    </label>
+                    {/* Toggle Retención */}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+                      <div onClick={() => setEntregaModal(m => ({ ...m, conRetencion: !m.conRetencion, retencion: m.conRetencion ? '' : m.retencion }))}
+                        style={{ width: 36, height: 20, borderRadius: 99, position: 'relative', cursor: 'pointer', background: entregaModal.conRetencion ? '#b45309' : 'var(--bdr2)', transition: 'background .2s', flexShrink: 0 }}>
+                        <div style={{ position: 'absolute', top: 2, left: entregaModal.conRetencion ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
+                      </div>
+                      <span style={{ fontSize: 13, color: 'var(--txt2)', fontWeight: 500 }}>Retención</span>
+                    </label>
+                    {entregaModal.conRetencion && (
+                      <input
+                        type="number" min="0" step="0.01" placeholder="Monto retención"
+                        value={entregaModal.retencion}
+                        onChange={e => setEntregaModal(m => ({ ...m, retencion: e.target.value }))}
+                        style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid #d97706', fontSize: 13, width: 150, background: '#fffbeb', color: '#92400e', fontWeight: 600 }}
+                      />
+                    )}
+                  </div>
+                  {/* Resumen de totales */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16, fontSize: 13, flexWrap: 'wrap' }}>
+                    <span><span style={{ color: 'var(--txt3)' }}>Subtotal </span><strong>{fmt(sub)}</strong></span>
+                    {entregaModal.conIva && <span><span style={{ color: 'var(--txt3)' }}>IVA </span><strong>{fmt(iva)}</strong></span>}
+                    {entregaModal.conRetencion && ret > 0 && <span><span style={{ color: '#b45309' }}>− Retención </span><strong style={{ color: '#b45309' }}>{fmt(ret)}</strong></span>}
+                    <span style={{ borderLeft: '1px solid var(--bdr)', paddingLeft: 16 }}><span style={{ color: 'var(--forest)' }}>Total </span><strong style={{ color: 'var(--forest)', fontSize: 14 }}>{fmt(total)}</strong></span>
                   </div>
                 </div>
               )
