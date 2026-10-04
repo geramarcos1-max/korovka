@@ -10,7 +10,6 @@ function fmtN(n, dec = 1) {
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
-// Color palette for pie chart and product bars
 const PIE_COLORS = [
   '#063831', '#2B6B50', '#4A9073', '#7CB5A0',
   '#A8D1C5', '#c8a85a', '#e07b4a', '#9b59b6',
@@ -34,7 +33,15 @@ function HBar({ pct, color = 'var(--forest)', height = 10 }) {
   )
 }
 
-// SVG Donut chart — no library needed
+function KpiChip({ label, value, color }) {
+  return (
+    <div style={{ background: 'var(--bg2)', border: '1px solid var(--bdr)', borderRadius: 10, padding: '12px 16px' }}>
+      <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--txt3)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color, lineHeight: 1.1 }}>{value}</div>
+    </div>
+  )
+}
+
 function DonutChart({ slices, size = 180 }) {
   const r = 68
   const cx = size / 2
@@ -51,7 +58,6 @@ function DonutChart({ slices, size = 180 }) {
 
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
-      {/* Track */}
       <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--cream-d)" strokeWidth={22} />
       {segments.map((s, i) => (
         <circle
@@ -70,22 +76,21 @@ function DonutChart({ slices, size = 180 }) {
 }
 
 export default function Inteligencia() {
-  const [loading, setLoading]         = useState(true)
-  const [ventas, setVentas]           = useState([])
-  const [ventaItems, setVentaItems]   = useState([])
-  const [productos, setProductos]     = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [ventas, setVentas]         = useState([])
+  const [ventaItems, setVentaItems] = useState([])
+  const [productos, setProductos]   = useState([])
   const [devoluciones, setDevoluciones] = useState([])
-  const [devItems, setDevItems]       = useState([])
+  const [devItems, setDevItems]     = useState([])
+  const [pvEntregas, setPvEntregas] = useState([])
 
-  // Período para la gráfica de barras (meses mostrados)
   const [periodoMeses, setPeriodoMeses] = useState(6)
 
-  // Filtro de análisis (desde / hasta) para top productos y pay chart
-  const hoy = new Date().toISOString().slice(0, 10)
+  const hoy   = new Date().toISOString().slice(0, 10)
   const hace6m = new Date(Date.now() - 183 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const [desde, setDesde] = useState(hace6m)
   const [hasta, setHasta] = useState(hoy)
-  const [mesSel, setMesSel] = useState(null) // 'YYYY-MM' o null
+  const [mesSel, setMesSel] = useState(null)
 
   useEffect(() => {
     async function load() {
@@ -94,19 +99,22 @@ export default function Inteligencia() {
         { data: p },
         { data: d },
         { data: di },
+        { data: pv },
       ] = await Promise.all([
         supabase.from('ventas').select('id, fecha, total, estado, metodo_pago').not('estado', 'eq', 'cancelada').order('fecha'),
         supabase.from('productos').select('id, nombre, unidad').order('nombre'),
         supabase.from('pv_devoluciones').select('id, fecha, motivo, notas').order('fecha', { ascending: false }).limit(300),
         supabase.from('pv_devolucion_items').select('devolucion_id, producto_id, cantidad'),
+        supabase.from('pv_entregas').select('id, total, estado, created_at, cliente:clientes(id, nombre), pv_cobros(monto)').order('created_at'),
       ])
+
       const ventasData = v || []
       setVentas(ventasData)
       setProductos(p || [])
       setDevoluciones(d || [])
       setDevItems(di || [])
+      setPvEntregas(pv || [])
 
-      // Fetch venta_items filtered by known IDs (avoids RLS issues with open queries)
       if (ventasData.length > 0) {
         const ids = ventasData.map(vt => vt.id)
         const { data: vi } = await supabase
@@ -121,7 +129,9 @@ export default function Inteligencia() {
     load()
   }, [])
 
-  // ── Ventas mes a mes (respeta periodoMeses) ────────────────
+  // ── Ventas mes a mes ──────────────────────────────────────
+  const mesActualKey = new Date().toISOString().slice(0, 7)
+
   const ventasMes = useMemo(() => {
     const map = {}
     for (const v of ventas) {
@@ -141,26 +151,21 @@ export default function Inteligencia() {
   const mesPrev      = useMemo(() => ventasMes[ventasMes.length - 2]?.[1]?.total || 0, [ventasMes])
   const crecimiento  = useMemo(() => mesPrev > 0 ? ((mesActual - mesPrev) / mesPrev) * 100 : null, [mesActual, mesPrev])
 
-  // ── Filtro de análisis: fechas o mes seleccionado ──────────
+  // ── Filtro análisis ───────────────────────────────────────
   const fechaDesde = mesSel ? `${mesSel}-01` : desde
   const fechaHasta = mesSel ? `${mesSel}-31` : hasta
 
-  const ventasFiltradas = useMemo(() => {
-    return ventas.filter(v => v.fecha >= fechaDesde && v.fecha <= fechaHasta)
-  }, [ventas, fechaDesde, fechaHasta])
-
+  const ventasFiltradas    = useMemo(() => ventas.filter(v => v.fecha >= fechaDesde && v.fecha <= fechaHasta), [ventas, fechaDesde, fechaHasta])
   const ventasFiltradasIds = useMemo(() => new Set(ventasFiltradas.map(v => v.id)), [ventasFiltradas])
+  const totalFiltro        = useMemo(() => ventasFiltradas.reduce((a, v) => a + Number(v.total || 0), 0), [ventasFiltradas])
 
-  const totalFiltro = useMemo(() => ventasFiltradas.reduce((a, v) => a + Number(v.total || 0), 0), [ventasFiltradas])
-
-  // ── Top productos (con filtro de fechas) ──────────────────
+  // ── Top productos ─────────────────────────────────────────
   const prodMap = useMemo(() => {
     const m = {}
     for (const p of productos) m[p.id] = { ...p, cantidad: 0, ingresos: 0 }
     for (const i of ventaItems) {
       if (!ventasFiltradasIds.has(i.venta_id)) continue
       if (!m[i.producto_id]) {
-        // producto no en catálogo activo, agrega con nombre desconocido
         m[i.producto_id] = { id: i.producto_id, nombre: `Producto ${i.producto_id?.slice(0, 6)}`, unidad: 'pza', cantidad: 0, ingresos: 0 }
       }
       m[i.producto_id].cantidad += Number(i.cantidad || 0)
@@ -171,7 +176,6 @@ export default function Inteligencia() {
 
   const maxProdIngresos = useMemo(() => Math.max(...prodMap.map(p => p.ingresos), 1), [prodMap])
 
-  // ── Pie chart slices (por ingresos) ───────────────────────
   const pieSlices = useMemo(() => {
     const total = prodMap.reduce((a, p) => a + p.ingresos, 0) || 1
     return prodMap.slice(0, 8).map((p, i) => ({
@@ -181,7 +185,32 @@ export default function Inteligencia() {
     }))
   }, [prodMap])
 
-  // ── Proyección semanal (siempre últimas 4 semanas) ────────
+  // ── Puntos de Venta ───────────────────────────────────────
+  const pvConEstado = useMemo(() => pvEntregas.map(e => {
+    const cobrado  = (e.pv_cobros || []).reduce((s, c) => s + Number(c.monto || 0), 0)
+    const pendiente = Math.max(0, Number(e.total || 0) - cobrado)
+    return { ...e, cobrado, pendiente }
+  }), [pvEntregas])
+
+  const pvTotalEntregado = useMemo(() => pvConEstado.reduce((a, e) => a + Number(e.total || 0), 0), [pvConEstado])
+  const pvTotalCobrado   = useMemo(() => pvConEstado.reduce((a, e) => a + e.cobrado, 0), [pvConEstado])
+  const pvSaldoPendiente = useMemo(() => pvConEstado.filter(e => e.estado !== 'pagada').reduce((a, e) => a + e.pendiente, 0), [pvConEstado])
+
+  const pvPorCliente = useMemo(() => {
+    const m = {}
+    for (const e of pvConEstado) {
+      const id     = e.cliente?.id || 'sin-id'
+      const nombre = e.cliente?.nombre || 'Sin cliente'
+      if (!m[id]) m[id] = { id, nombre, entregado: 0, cobrado: 0, pendiente: 0, entregas: 0 }
+      m[id].entregado += Number(e.total || 0)
+      m[id].cobrado   += e.cobrado
+      m[id].pendiente += e.pendiente
+      m[id].entregas++
+    }
+    return Object.values(m).sort((a, b) => b.pendiente - a.pendiente)
+  }, [pvConEstado])
+
+  // ── Proyección semanal ────────────────────────────────────
   const proyecciones = useMemo(() => {
     const hace28 = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
     const ids28  = new Set(ventas.filter(v => v.fecha >= hace28).map(v => v.id))
@@ -227,8 +256,11 @@ export default function Inteligencia() {
     ? (() => { const [y, mo] = mesSel.split('-'); return `${MONTH_NAMES[parseInt(mo) - 1]} ${y}` })()
     : `${desde} → ${hasta}`
 
+  const BAR_H = 160 // altura máxima de barras en px
+
   return (
     <div>
+
       {/* ── Encabezado ── */}
       <div className="page-hdr" style={{ marginBottom: 20 }}>
         <div>
@@ -244,23 +276,18 @@ export default function Inteligencia() {
         </div>
       </div>
 
-      {/* ── KPI fila (sin devoluciones, solo unidades devueltas) ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 12, marginBottom: 24 }}>
+      {/* ── KPIs ventas ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 12, marginBottom: 20 }}>
         {[
           { label: 'Total periodo', value: fmt(totalPeriodo), color: 'var(--forest)' },
           { label: 'Promedio mensual', value: fmt(promedioMes), color: '#2563eb' },
           { label: 'Mes actual', value: fmt(mesActual), color: crecimiento !== null && crecimiento >= 0 ? 'var(--ok)' : 'var(--red)' },
           ...(crecimiento !== null ? [{ label: 'vs mes anterior', value: (crecimiento >= 0 ? '+' : '') + fmtN(crecimiento) + '%', color: crecimiento >= 0 ? 'var(--ok)' : 'var(--red)' }] : []),
           { label: 'Unidades devueltas', value: fmtN(totalDevUnidades, 0), color: 'var(--amber-t)' },
-        ].map(k => (
-          <div key={k.label} style={{ background: 'var(--bg2)', border: '1px solid var(--bdr)', borderRadius: 10, padding: '12px 16px' }}>
-            <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--txt3)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>{k.label}</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: k.color, lineHeight: 1.1 }}>{k.value}</div>
-          </div>
-        ))}
+        ].map(k => <KpiChip key={k.label} {...k} />)}
       </div>
 
-      {/* ── Ventas mes a mes ── */}
+      {/* ── Ventas mes a mes — barras VERTICALES ── */}
       <div className="card" style={{ marginBottom: 20 }}>
         <SectionTitle sub={`Últimos ${periodoMeses} meses · Total ${fmt(totalPeriodo)} · Clic en un mes para filtrar el análisis`}>
           Ventas mes a mes
@@ -268,44 +295,71 @@ export default function Inteligencia() {
         {ventasMes.length === 0 ? (
           <div className="empty" style={{ padding: '28px 0' }}>Sin datos suficientes</div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {ventasMes.map(([key, data]) => {
-              const [yr, mo] = key.split('-')
-              const label = `${MONTH_NAMES[parseInt(mo) - 1]} ${yr}`
-              const pct   = (data.total / maxMes) * 100
-              const esActual  = key === new Date().toISOString().slice(0, 7)
-              const esSel     = mesSel === key
-              return (
-                <div
-                  key={key}
-                  onClick={() => setMesSel(esSel ? null : key)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', borderRadius: 8, padding: '4px 6px', background: esSel ? 'var(--forest-s)' : 'transparent', transition: 'background .15s' }}
-                >
-                  <div style={{ width: 56, fontSize: 12, color: esActual ? 'var(--forest)' : esSel ? 'var(--forest)' : 'var(--txt3)', fontWeight: esActual || esSel ? 700 : 400, flexShrink: 0, textAlign: 'right', lineHeight: 1.3 }}>
-                    {label}
+          <div>
+            {/* Área de barras */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: BAR_H + 28, paddingBottom: 0 }}>
+              {ventasMes.map(([key, data]) => {
+                const barH   = Math.max((data.total / maxMes) * BAR_H, 3)
+                const esSel  = mesSel === key
+                const esAct  = key === mesActualKey
+                const color  = esSel ? 'var(--forest)' : esAct ? '#2B6B50' : '#7CB5A0'
+                const [, mo] = key.split('-')
+                return (
+                  <div
+                    key={key}
+                    onClick={() => setMesSel(esSel ? null : key)}
+                    title={`${MONTH_NAMES[parseInt(mo)-1]} · ${fmt(data.total)} · ${data.count} ventas`}
+                    style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', cursor: 'pointer', height: '100%' }}
+                  >
+                    {/* Importe encima */}
+                    <div style={{ fontSize: 9.5, fontWeight: 600, color: esSel ? 'var(--forest)' : 'var(--txt3)', textAlign: 'center', marginBottom: 3, lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+                      {fmt(data.total)}
+                    </div>
+                    {/* Barra */}
+                    <div style={{
+                      width: '100%',
+                      height: barH,
+                      background: color,
+                      borderRadius: '4px 4px 0 0',
+                      transition: 'height .4s ease, background .15s',
+                      opacity: esSel ? 1 : 0.8,
+                      outline: esSel ? `2px solid var(--forest)` : 'none',
+                      outlineOffset: 1,
+                    }} />
                   </div>
-                  <HBar pct={pct} color={esSel ? 'var(--forest)' : esActual ? '#2B6B50' : 'var(--forest)'} height={26} />
-                  <div style={{ width: 90, fontSize: 13, fontWeight: 600, color: 'var(--txt)', flexShrink: 0, textAlign: 'right' }}>
-                    {fmt(data.total)}
+                )
+              })}
+            </div>
+            {/* Línea base */}
+            <div style={{ borderTop: '2px solid var(--bdr)', marginBottom: 6 }} />
+            {/* Etiquetas de mes */}
+            <div style={{ display: 'flex', gap: 6 }}>
+              {ventasMes.map(([key, data]) => {
+                const [yr, mo] = key.split('-')
+                const esSel = mesSel === key
+                const esAct = key === mesActualKey
+                return (
+                  <div key={key} onClick={() => setMesSel(esSel ? null : key)}
+                    style={{ flex: 1, textAlign: 'center', cursor: 'pointer', lineHeight: 1.3 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: esSel || esAct ? 700 : 400, color: esSel || esAct ? 'var(--forest)' : 'var(--txt3)' }}>
+                      {MONTH_NAMES[parseInt(mo) - 1]}
+                    </div>
+                    <div style={{ fontSize: 9, color: 'var(--txt3)' }}>{yr.slice(2)}</div>
+                    <div style={{ fontSize: 9, color: 'var(--txt3)' }}>{data.count}v</div>
                   </div>
-                  <div style={{ width: 38, fontSize: 11, color: 'var(--txt3)', flexShrink: 0 }}>
-                    {data.count} v.
-                  </div>
-                </div>
-              )
-            })}
-            {/* Línea promedio */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 8, borderTop: '1px dashed var(--bdr)', marginTop: 4 }}>
-              <div style={{ width: 56, fontSize: 11, color: 'var(--txt3)', textAlign: 'right', flexShrink: 0 }}>prom.</div>
-              <HBar pct={(promedioMes / maxMes) * 100} color="var(--amber)" height={4} />
-              <div style={{ width: 90, fontSize: 12, color: 'var(--amber-t)', fontWeight: 600, textAlign: 'right', flexShrink: 0 }}>{fmt(promedioMes)}</div>
-              <div style={{ width: 38 }} />
+                )
+              })}
+            </div>
+            {/* Promedio */}
+            <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, paddingTop: 8, borderTop: '1px dashed var(--bdr)' }}>
+              <span style={{ fontSize: 11, color: 'var(--txt3)' }}>Promedio mensual:</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--amber-t)' }}>{fmt(promedioMes)}</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* ── Filtro de análisis ─────────────────────────────────── */}
+      {/* ── Filtro de análisis ── */}
       <div style={{ background: 'var(--bg2)', border: '1px solid var(--bdr)', borderRadius: 10, padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt3)', textTransform: 'uppercase', letterSpacing: '.07em' }}>Período de análisis</div>
         {mesSel ? (
@@ -324,10 +378,9 @@ export default function Inteligencia() {
         )}
       </div>
 
-      {/* ── Top productos + Pie chart ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, marginBottom: 20 }}>
+      {/* ── Top productos + Donut ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: prodMap.length > 0 ? '1fr 280px' : '1fr', gap: 16, marginBottom: 20 }}>
 
-        {/* Top productos */}
         <div className="card">
           <SectionTitle sub={`Por ingresos · ${labelFiltro}`}>Top productos</SectionTitle>
           {prodMap.length === 0 ? (
@@ -353,9 +406,8 @@ export default function Inteligencia() {
           )}
         </div>
 
-        {/* Pie / Donut chart */}
         {prodMap.length > 0 && (
-          <div className="card" style={{ minWidth: 260 }}>
+          <div className="card">
             <SectionTitle sub="Composición por ingresos">Desglose</SectionTitle>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
               <div style={{ position: 'relative', display: 'inline-block' }}>
@@ -365,9 +417,8 @@ export default function Inteligencia() {
                   <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>{fmt(totalFiltro)}</div>
                 </div>
               </div>
-              {/* Leyenda */}
               <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                {pieSlices.map((s, i) => (
+                {pieSlices.map(s => (
                   <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ width: 8, height: 8, borderRadius: 2, background: s.color, flexShrink: 0 }} />
                     <div style={{ fontSize: 11.5, color: 'var(--txt2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.nombre}</div>
@@ -376,6 +427,66 @@ export default function Inteligencia() {
                 ))}
               </div>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Puntos de Venta ── */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <SectionTitle sub="Consignaciones y cuentas por cobrar de puntos de venta">
+          Puntos de Venta
+        </SectionTitle>
+
+        {/* KPIs PV */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
+          <KpiChip label="Total entregado" value={fmt(pvTotalEntregado)} color="var(--forest)" />
+          <KpiChip label="Total cobrado" value={fmt(pvTotalCobrado)} color="var(--ok)" />
+          <KpiChip label="Saldo por cobrar" value={fmt(pvSaldoPendiente)} color={pvSaldoPendiente > 0 ? 'var(--amber-t)' : 'var(--ok)'} />
+          <KpiChip label="Clientes PV" value={pvPorCliente.length} color="var(--forest)" />
+        </div>
+
+        {/* Tabla CxC por cliente */}
+        {pvPorCliente.length === 0 ? (
+          <div className="empty" style={{ padding: '20px 0' }}>Sin puntos de venta registrados</div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Cliente (punto de venta)</th>
+                  <th className="txt-right">Entregas</th>
+                  <th className="txt-right">Total entregado</th>
+                  <th className="txt-right">Cobrado</th>
+                  <th className="txt-right">Saldo pendiente</th>
+                  <th className="txt-right">% cobrado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pvPorCliente.map(c => {
+                  const pctCob = c.entregado > 0 ? (c.cobrado / c.entregado) * 100 : 0
+                  return (
+                    <tr key={c.id}>
+                      <td style={{ fontWeight: 500 }}>{c.nombre}</td>
+                      <td className="txt-right mono">{c.entregas}</td>
+                      <td className="txt-right mono">{fmt(c.entregado)}</td>
+                      <td className="txt-right mono">{fmt(c.cobrado)}</td>
+                      <td className="txt-right">
+                        {c.pendiente > 0
+                          ? <span style={{ fontWeight: 700, color: 'var(--amber-t)' }}>{fmt(c.pendiente)}</span>
+                          : <span style={{ color: 'var(--ok-t)', fontWeight: 600 }}>Al día ✓</span>
+                        }
+                      </td>
+                      <td className="txt-right">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                          <HBar pct={pctCob} color={pctCob >= 100 ? 'var(--ok)' : pctCob >= 60 ? 'var(--amber)' : 'var(--red)'} height={6} />
+                          <span style={{ fontSize: 12, fontWeight: 600, minWidth: 36, textAlign: 'right', color: 'var(--txt2)' }}>{fmtN(pctCob, 0)}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -462,6 +573,7 @@ export default function Inteligencia() {
           </div>
         )}
       </div>
+
     </div>
   )
 }
