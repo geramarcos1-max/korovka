@@ -130,6 +130,78 @@ export default function PuntosVenta() {
     setSaving(false)
   }
 
+  // ─── UPDATE ENTREGA ────────────────────────────────────────
+  async function updateEntrega(f) {
+    setSaving(true)
+    setError('')
+    try {
+      let oc_url = f.oc_url || null
+      if (f.ocFile) {
+        const ext = f.ocFile.name.split('.').pop()
+        const path = `${f.folio}.${ext}`
+        await supabase.storage.from('ordenes-compra').upload(path, f.ocFile, { upsert: true })
+        const { data: urlData } = supabase.storage.from('ordenes-compra').getPublicUrl(path)
+        oc_url = urlData.publicUrl
+      }
+      const { error: e1 } = await supabase.from('pv_entregas').update({
+        folio: f.folio,
+        cliente_id: f.cliente_id,
+        fecha: f.fecha,
+        fecha_pago_programada: f.fecha_pago_programada,
+        oc_url,
+        notas: f.notas || null,
+        estado: f.estado,
+      }).eq('id', f.id)
+      if (e1) throw e1
+      setEntregaModal(null)
+      await load()
+    } catch (err) {
+      setError(err.message || 'Error al guardar')
+    }
+    setSaving(false)
+  }
+
+  // ─── UPDATE DEVOLUCION ─────────────────────────────────────
+  async function updateDev(f) {
+    setSaving(true)
+    setError('')
+    try {
+      const { error: e1 } = await supabase.from('pv_devoluciones').update({
+        fecha: f.fecha,
+        motivo: f.motivo,
+        notas: f.notas || null,
+      }).eq('id', f.id)
+      if (e1) throw e1
+      setDevModal(null)
+      await load()
+    } catch (err) {
+      setError(err.message || 'Error al guardar')
+    }
+    setSaving(false)
+  }
+
+  // ─── UPDATE CLIENTE ────────────────────────────────────────
+  async function updateCliente(f) {
+    setSaving(true)
+    setError('')
+    try {
+      const { error: e1 } = await supabase.from('clientes').update({
+        nombre: f.nombre,
+        contacto: f.contacto || null,
+        telefono: f.telefono || null,
+        email: f.email || null,
+        rfc: f.rfc || null,
+        direccion: f.direccion || null,
+      }).eq('id', f.id)
+      if (e1) throw e1
+      setClienteModal(null)
+      await load()
+    } catch (err) {
+      setError(err.message || 'Error al guardar')
+    }
+    setSaving(false)
+  }
+
   // ─── SAVE COBRO ────────────────────────────────────────────
   async function saveCobro(f) {
     setSaving(true)
@@ -324,6 +396,12 @@ export default function PuntosVenta() {
                       <button className="btn btn-ghost btn-sm" onClick={() => setDevModal({ entrega_id: e.id, folio: e.folio, fecha: today(), motivo: 'perdida_vacio', notas: '', items: (e.pv_entrega_items || []).map(i => ({ producto_id: i.producto_id, nombre: i.producto?.nombre, cantidad: 0 })), pv_entrega_items: e.pv_entrega_items })}>
                         Devolución
                       </button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setEntregaModal({
+                        id: e.id, folio: e.folio, cliente_id: e.cliente_id, fecha: e.fecha,
+                        fecha_pago_programada: e.fecha_pago_programada, conIva: e.iva > 0,
+                        estado: e.estado, notas: e.notas || '', oc_url: e.oc_url, ocFile: null,
+                        editMode: true,
+                      })}>Editar</button>
                     </div>
                   </td>
                 </tr>
@@ -362,9 +440,17 @@ export default function PuntosVenta() {
                     }
                   </td>
                   <td>
-                    {!d.reposicion_completada && (
-                      <button className="btn btn-ghost btn-sm" onClick={() => marcarReposicion(d.id)}>Marcar repuesta</button>
-                    )}
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {!d.reposicion_completada && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => marcarReposicion(d.id)}>Marcar repuesta</button>
+                      )}
+                      <button className="btn btn-ghost btn-sm" onClick={() => setDevModal({
+                        id: d.id, editMode: true,
+                        entrega_id: d.entrega_id, folio: d.entrega?.folio || '',
+                        fecha: d.fecha, motivo: d.motivo, notas: d.notas || '',
+                        items: [], pv_entrega_items: [],
+                      })}>Editar</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -380,10 +466,10 @@ export default function PuntosVenta() {
             <button className="btn btn-amber" onClick={() => setClienteModal({ nombre: '', contacto: '', telefono: '', email: '', rfc: '', direccion: '' })}>+ Nuevo cliente</button>
           </div>
           <table className="data-table">
-            <thead><tr><th>Nombre</th><th>Contacto</th><th>Teléfono</th><th>Email</th><th>RFC</th><th>Dirección</th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Contacto</th><th>Teléfono</th><th>Email</th><th>RFC</th><th>Dirección</th><th></th></tr></thead>
             <tbody>
               {clientes.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--txt3)', padding: 24 }}>Sin clientes institucionales</td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--txt3)', padding: 24 }}>Sin clientes institucionales</td></tr>
               )}
               {clientes.map(c => (
                 <tr key={c.id}>
@@ -393,6 +479,13 @@ export default function PuntosVenta() {
                   <td>{c.email || '—'}</td>
                   <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{c.rfc || '—'}</td>
                   <td>{c.direccion || '—'}</td>
+                  <td>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setClienteModal({
+                      id: c.id, editMode: true,
+                      nombre: c.nombre, contacto: c.contacto || '', telefono: c.telefono || '',
+                      email: c.email || '', rfc: c.rfc || '', direccion: c.direccion || '',
+                    })}>Editar</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -403,7 +496,7 @@ export default function PuntosVenta() {
       {/* ─── MODAL: NUEVA ENTREGA ─────────────────────────────── */}
       {entregaModal && (
         <ModalOverlay onClose={() => setEntregaModal(null)}>
-          <h3 style={{ margin: '0 0 18px', fontSize: 17, fontWeight: 700, color: 'var(--forest)' }}>Nueva entrega institucional</h3>
+          <h3 style={{ margin: '0 0 18px', fontSize: 17, fontWeight: 700, color: 'var(--forest)' }}>{entregaModal.editMode ? 'Editar entrega' : 'Nueva entrega institucional'}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
             <div>
               <label className="form-label">Folio</label>
@@ -421,6 +514,22 @@ export default function PuntosVenta() {
                 {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </select>
             </div>
+            {entregaModal.editMode && (
+              <>
+                <div>
+                  <label className="form-label">Fecha pago programado</label>
+                  <input className="form-input" type="date" value={entregaModal.fecha_pago_programada || ''} onChange={e => setEntregaModal(m => ({ ...m, fecha_pago_programada: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="form-label">Estado</label>
+                  <select className="form-input" value={entregaModal.estado} onChange={e => setEntregaModal(m => ({ ...m, estado: e.target.value }))}>
+                    <option value="pendiente">Pendiente</option>
+                    <option value="pagada">Pagada</option>
+                    <option value="cancelada">Cancelada</option>
+                  </select>
+                </div>
+              </>
+            )}
             <div style={{ gridColumn: '1/-1' }}>
               <label className="form-label">Orden de compra</label>
               <label style={{
@@ -445,7 +554,7 @@ export default function PuntosVenta() {
             </div>
           </div>
 
-          <div style={{ marginBottom: 12 }}>
+          {!entregaModal.editMode && <div style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <label className="form-label" style={{ margin: 0 }}>Productos</label>
               <button className="btn btn-ghost btn-sm" onClick={() => setEntregaModal(m => ({ ...m, items: [...m.items, { producto_id: '', cantidad: 1, precio_unitario: 0 }] }))}>+ Agregar</button>
@@ -473,25 +582,13 @@ export default function PuntosVenta() {
               const iva = entregaModal.conIva ? sub * 0.16 : 0
               return (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
-                  {/* Toggle IVA */}
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
-                    <div
-                      onClick={() => setEntregaModal(m => ({ ...m, conIva: !m.conIva }))}
-                      style={{
-                        width: 36, height: 20, borderRadius: 99, position: 'relative', cursor: 'pointer',
-                        background: entregaModal.conIva ? 'var(--forest)' : 'var(--bdr2)',
-                        transition: 'background .2s',
-                      }}
-                    >
-                      <div style={{
-                        position: 'absolute', top: 2, left: entregaModal.conIva ? 18 : 2,
-                        width: 16, height: 16, borderRadius: '50%', background: '#fff',
-                        transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)',
-                      }} />
+                    <div onClick={() => setEntregaModal(m => ({ ...m, conIva: !m.conIva }))}
+                      style={{ width: 36, height: 20, borderRadius: 99, position: 'relative', cursor: 'pointer', background: entregaModal.conIva ? 'var(--forest)' : 'var(--bdr2)', transition: 'background .2s' }}>
+                      <div style={{ position: 'absolute', top: 2, left: entregaModal.conIva ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
                     </div>
                     <span style={{ fontSize: 13, color: 'var(--txt2)', fontWeight: 500 }}>IVA 16%</span>
                   </label>
-                  {/* Totales */}
                   <div style={{ fontSize: 13, textAlign: 'right' }}>
                     <span style={{ color: 'var(--txt2)' }}>Subtotal: </span><strong>{fmt(sub)}</strong>
                     {entregaModal.conIva && <><span style={{ color: 'var(--txt3)', marginLeft: 12 }}>IVA: </span><strong>{fmt(iva)}</strong></>}
@@ -500,7 +597,7 @@ export default function PuntosVenta() {
                 </div>
               )
             })()}
-          </div>
+          </div>}
 
           <div style={{ marginBottom: 16 }}>
             <label className="form-label">Notas</label>
@@ -509,9 +606,13 @@ export default function PuntosVenta() {
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <button className="btn btn-ghost" onClick={() => setEntregaModal(null)}>Cancelar</button>
-            <button className="btn btn-amber" disabled={saving || !entregaModal.cliente_id || entregaModal.items.filter(i => i.producto_id && Number(i.cantidad) > 0).length === 0}
-              onClick={() => saveEntrega({ ...entregaModal, items: entregaModal.items.filter(i => i.producto_id && Number(i.cantidad) > 0) })}>
-              {saving ? 'Guardando…' : 'Registrar entrega'}
+            <button className="btn btn-amber"
+              disabled={saving || !entregaModal.cliente_id || (!entregaModal.editMode && entregaModal.items.filter(i => i.producto_id && Number(i.cantidad) > 0).length === 0)}
+              onClick={() => entregaModal.editMode
+                ? updateEntrega(entregaModal)
+                : saveEntrega({ ...entregaModal, items: entregaModal.items.filter(i => i.producto_id && Number(i.cantidad) > 0) })
+              }>
+              {saving ? 'Guardando…' : entregaModal.editMode ? 'Guardar cambios' : 'Registrar entrega'}
             </button>
           </div>
         </ModalOverlay>
@@ -558,7 +659,7 @@ export default function PuntosVenta() {
       {/* ─── MODAL: DEVOLUCIÓN ───────────────────────────────── */}
       {devModal && (
         <ModalOverlay onClose={() => setDevModal(null)}>
-          <h3 style={{ margin: '0 0 4px', fontSize: 17, fontWeight: 700, color: 'var(--forest)' }}>Registrar devolución</h3>
+          <h3 style={{ margin: '0 0 4px', fontSize: 17, fontWeight: 700, color: 'var(--forest)' }}>{devModal.editMode ? 'Editar devolución' : 'Registrar devolución'}</h3>
           <div style={{ fontSize: 13, color: 'var(--txt2)', marginBottom: 16 }}>{devModal.folio}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
             <div>
@@ -575,6 +676,7 @@ export default function PuntosVenta() {
               </select>
             </div>
           </div>
+          {!devModal.editMode && (
           <div style={{ marginBottom: 12 }}>
             <label className="form-label">Cantidades devueltas</label>
             {devModal.items.map((item, idx) => (
@@ -585,15 +687,17 @@ export default function PuntosVenta() {
               </div>
             ))}
           </div>
+          )}
           <div style={{ marginBottom: 16 }}>
             <label className="form-label">Notas</label>
             <textarea className="form-input" rows={2} value={devModal.notas} onChange={e => setDevModal(m => ({ ...m, notas: e.target.value }))} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <button className="btn btn-ghost" onClick={() => setDevModal(null)}>Cancelar</button>
-            <button className="btn btn-amber" disabled={saving || devModal.items.filter(i => Number(i.cantidad) > 0).length === 0}
-              onClick={() => saveDev({ ...devModal, items: devModal.items.filter(i => Number(i.cantidad) > 0) })}>
-              {saving ? 'Guardando…' : 'Registrar devolución'}
+            <button className="btn btn-amber"
+              disabled={saving || (!devModal.editMode && devModal.items.filter(i => Number(i.cantidad) > 0).length === 0)}
+              onClick={() => devModal.editMode ? updateDev(devModal) : saveDev({ ...devModal, items: devModal.items.filter(i => Number(i.cantidad) > 0) })}>
+              {saving ? 'Guardando…' : devModal.editMode ? 'Guardar cambios' : 'Registrar devolución'}
             </button>
           </div>
         </ModalOverlay>
@@ -602,7 +706,7 @@ export default function PuntosVenta() {
       {/* ─── MODAL: CLIENTE ──────────────────────────────────── */}
       {clienteModal && (
         <ModalOverlay onClose={() => setClienteModal(null)}>
-          <h3 style={{ margin: '0 0 18px', fontSize: 17, fontWeight: 700, color: 'var(--forest)' }}>Nuevo cliente institucional</h3>
+          <h3 style={{ margin: '0 0 18px', fontSize: 17, fontWeight: 700, color: 'var(--forest)' }}>{clienteModal.editMode ? 'Editar cliente' : 'Nuevo cliente institucional'}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {[
               { key: 'nombre', label: 'Nombre *', full: true },
@@ -620,8 +724,9 @@ export default function PuntosVenta() {
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
             <button className="btn btn-ghost" onClick={() => setClienteModal(null)}>Cancelar</button>
-            <button className="btn btn-amber" disabled={saving || !clienteModal.nombre} onClick={() => saveCliente(clienteModal)}>
-              {saving ? 'Guardando…' : 'Guardar cliente'}
+            <button className="btn btn-amber" disabled={saving || !clienteModal.nombre}
+              onClick={() => clienteModal.editMode ? updateCliente(clienteModal) : saveCliente(clienteModal)}>
+              {saving ? 'Guardando…' : clienteModal.editMode ? 'Guardar cambios' : 'Guardar cliente'}
             </button>
           </div>
         </ModalOverlay>
