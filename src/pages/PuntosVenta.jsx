@@ -119,7 +119,6 @@ export default function PuntosVenta() {
           concepto: `Entrega institucional ${ent.folio}`,
           referencia_id: ent.id,
           referencia_tipo: 'pv_entrega',
-          creado_por: user.id,
         }))
       )
       setEntregaModal(null)
@@ -208,14 +207,12 @@ export default function PuntosVenta() {
     setSaving(true)
     setError('')
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       const { error: e1 } = await supabase.from('pv_cobros').insert({
         entrega_id: f.entrega_id,
         fecha: f.fecha,
         monto: Number(f.monto),
         metodo: f.metodo,
         notas: f.notas || null,
-        creado_por: user.id,
       })
       if (e1) throw e1
       // Si el cobro cubre el pendiente → marcar pagada
@@ -236,14 +233,12 @@ export default function PuntosVenta() {
     setSaving(true)
     setError('')
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       const { data: dev, error: e1 } = await supabase.from('pv_devoluciones').insert({
         entrega_id: f.entrega_id,
         fecha: f.fecha,
         motivo: f.motivo,
         notas: f.notas || null,
         reposicion_completada: false,
-        creado_por: user.id,
       }).select().single()
       if (e1) throw e1
       await supabase.from('pv_devolucion_items').insert(
@@ -262,7 +257,6 @@ export default function PuntosVenta() {
           concepto: `Devolución ${f.motivo} — necesita reposición`,
           referencia_id: dev.id,
           referencia_tipo: 'pv_devolucion',
-          creado_por: user.id,
         }))
       )
       setDevModal(null)
