@@ -414,9 +414,14 @@ export default function Caja() {
               </div>
             ))}
             {balances.length > 0 && (() => {
-              const totalRepartido = movimientos
-                .filter(m => m.tipo === 'transferencia_salida' && m.referencia_tipo === 'reparto_ganancias')
-                .reduce((a, m) => a + Math.abs(Number(m.monto)), 0)
+              // Reparto por persona: sumamos transferencia_entrada (quien recibió)
+              const repartoPorPersona = {}
+              for (const m of movimientos) {
+                if (m.tipo === 'transferencia_entrada' && m.referencia_tipo === 'reparto_ganancias') {
+                  repartoPorPersona[m.persona_id] = (repartoPorPersona[m.persona_id] || 0) + Number(m.monto)
+                }
+              }
+              const totalRepartido = Object.values(repartoPorPersona).reduce((a, b) => a + b, 0)
               return (
                 <>
                   <div className="card" style={{ borderTop: '3px solid var(--forest)', background: 'var(--forest-s)' }}>
@@ -424,13 +429,21 @@ export default function Caja() {
                     <div className="kpi-val" style={{ color: 'var(--forest)', fontSize: 24 }}>{fmtSigned(totalGeneral)}</div>
                     <div className="kpi-sub">suma de todos</div>
                   </div>
-                  {totalRepartido > 0 && (
-                    <div className="card" style={{ borderTop: '3px solid #7c3aed' }}>
-                      <div className="card-title">Reparto de ganancias</div>
-                      <div className="kpi-val" style={{ color: '#7c3aed', fontSize: 24 }}>−{fmt(totalRepartido)}</div>
-                      <div className="kpi-sub">distribuido a socios · no afecta saldo</div>
+                  <div className="card" style={{ borderTop: '3px solid #7c3aed', gridColumn: '1 / -1' }}>
+                    <div className="card-title" style={{ marginBottom: 12 }}>Reparto de ganancias</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: totalRepartido > 0 ? 10 : 0 }}>
+                      {personas.map(p => (
+                        <div key={p.id} style={{ background: '#f3e8ff', borderRadius: 8, padding: '10px 14px' }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>{p.nombre}</div>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: '#7c3aed' }}>{fmt(repartoPorPersona[p.id] || 0)}</div>
+                        </div>
+                      ))}
                     </div>
-                  )}
+                    {totalRepartido > 0
+                      ? <div style={{ fontSize: 12, color: 'var(--txt3)' }}>Total distribuido: <strong style={{ color: '#7c3aed' }}>{fmt(totalRepartido)}</strong> · no afecta saldo operativo</div>
+                      : <div style={{ fontSize: 12, color: 'var(--txt3)' }}>Sin repartos registrados aún</div>
+                    }
+                  </div>
                 </>
               )
             })()}
