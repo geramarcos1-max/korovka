@@ -490,7 +490,7 @@ export default function Caja() {
             )}
             <div className="card" style={{ borderTop: '3px solid var(--forest)' }}>
               <div className="card-title">{totalReembolsos > 0 ? 'Gastos netos' : 'Total salidas'}</div>
-              <div className="kpi-val" style={{ color: 'var(--forest)', fontSize: 22 }}>{fmt(totalNeto + totalInversion)}</div>
+              <div className="kpi-val" style={{ color: 'var(--forest)', fontSize: 22 }}>−{fmt(totalNeto + totalInversion)}</div>
               <div className="kpi-sub">{gastos.length} registros{totalReembolsos > 0 ? ' · con reembolsos' : ''}</div>
             </div>
           </div>
