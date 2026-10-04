@@ -194,6 +194,8 @@ export default function Caja() {
     const map = {}
     for (const p of personas) map[p.id] = { ...p, saldo: 0 }
     for (const m of movimientos) {
+      // El reparto de ganancias no afecta el saldo operativo de cada persona
+      if (m.referencia_tipo === 'reparto_ganancias') continue
       if (map[m.persona_id]) map[m.persona_id].saldo += Number(m.monto)
     }
     return Object.values(map)
@@ -411,13 +413,27 @@ export default function Caja() {
                 </div>
               </div>
             ))}
-            {balances.length > 0 && (
-              <div className="card" style={{ borderTop: '3px solid var(--forest)', background: 'var(--forest-s)' }}>
-                <div className="card-title">Total en caja</div>
-                <div className="kpi-val" style={{ color: 'var(--forest)', fontSize: 24 }}>{fmtSigned(totalGeneral)}</div>
-                <div className="kpi-sub">suma de todos</div>
-              </div>
-            )}
+            {balances.length > 0 && (() => {
+              const totalRepartido = movimientos
+                .filter(m => m.tipo === 'transferencia_salida' && m.referencia_tipo === 'reparto_ganancias')
+                .reduce((a, m) => a + Math.abs(Number(m.monto)), 0)
+              return (
+                <>
+                  <div className="card" style={{ borderTop: '3px solid var(--forest)', background: 'var(--forest-s)' }}>
+                    <div className="card-title">Total en caja</div>
+                    <div className="kpi-val" style={{ color: 'var(--forest)', fontSize: 24 }}>{fmtSigned(totalGeneral)}</div>
+                    <div className="kpi-sub">suma de todos</div>
+                  </div>
+                  {totalRepartido > 0 && (
+                    <div className="card" style={{ borderTop: '3px solid #7c3aed' }}>
+                      <div className="card-title">Reparto de ganancias</div>
+                      <div className="kpi-val" style={{ color: '#7c3aed', fontSize: 24 }}>−{fmt(totalRepartido)}</div>
+                      <div className="kpi-sub">distribuido a socios · no afecta saldo</div>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
             {balances.length === 0 && (
               <div className="card" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '36px 20px' }}>
                 <div style={{ fontSize: 28, marginBottom: 10 }}>💵</div>
