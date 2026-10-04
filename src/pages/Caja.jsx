@@ -121,11 +121,18 @@ const emptyGasto = {
   notas: '',
 }
 
+const TRANS_PROPOSITOS = [
+  { value: 'corte_caja',        label: 'Corte de caja',       desc: 'Efectivo de ventas que se centraliza' },
+  { value: 'reembolso_gasto',   label: 'Reembolso de gasto',  desc: 'Cubre gastos que la persona pagó de su bolsillo' },
+  { value: 'reparto_ganancias', label: 'Reparto de ganancias', desc: 'Distribución de utilidades' },
+]
+
 const emptyTrans = {
   de_persona_id: '',
   a_persona_id: '',
   monto: '',
   concepto: '',
+  proposito: 'corte_caja',
 }
 
 export default function Caja() {
@@ -198,6 +205,17 @@ export default function Caja() {
   const inversiones = useMemo(() => gastos.filter(g => g.referencia_tipo === 'inversion'), [gastos])
   const soloGastos  = useMemo(() => gastos.filter(g => g.referencia_tipo !== 'inversion'), [gastos])
 
+  // Reembolsos: transferencias_entrada cuyo propósito es 'reembolso_gasto'
+  const reembolsosPorPersona = useMemo(() => {
+    const map = {}
+    for (const m of movimientos) {
+      if (m.tipo === 'transferencia_entrada' && m.referencia_tipo === 'reembolso_gasto') {
+        map[m.persona_id] = (map[m.persona_id] || 0) + Number(m.monto)
+      }
+    }
+    return map
+  }, [movimientos])
+
   const gastosPorCat = useMemo(() => {
     const map = {}
     for (const g of gastos) {
@@ -265,8 +283,8 @@ export default function Caja() {
     const concepto = transForm.concepto || 'Transferencia entre personas'
     const monto = Math.abs(Number(transForm.monto))
     const { error } = await supabase.from('caja_movimientos').insert([
-      { persona_id: transForm.de_persona_id, tipo: 'transferencia_salida', monto: -monto, concepto, referencia_id: refId, referencia_tipo: 'transferencia', creado_por: profile?.id },
-      { persona_id: transForm.a_persona_id,  tipo: 'transferencia_entrada', monto,        concepto, referencia_id: refId, referencia_tipo: 'transferencia', creado_por: profile?.id },
+      { persona_id: transForm.de_persona_id, tipo: 'transferencia_salida', monto: -monto, concepto, referencia_id: refId, referencia_tipo: transForm.proposito || 'corte_caja', creado_por: profile?.id },
+      { persona_id: transForm.a_persona_id,  tipo: 'transferencia_entrada', monto,        concepto, referencia_id: refId, referencia_tipo: transForm.proposito || 'corte_caja', creado_por: profile?.id },
     ])
     if (error) { setTransSaving(false); setTransErr(error.message); return }
     setTransSaving(false); setTransModal(false); setTransForm(emptyTrans); load()
@@ -315,6 +333,7 @@ export default function Caja() {
       a_persona_id: t.entrada?.persona_id || '',
       monto: Math.abs(Number(t.salida?.monto || 0)),
       concepto: t.salida?.concepto || '',
+      proposito: t.salida?.referencia_tipo || 'corte_caja',
     })
     setEditTransErr('')
     setEditTransModal(true)
@@ -327,9 +346,10 @@ export default function Caja() {
     setEditTransSaving(true)
     const monto = Math.abs(Number(editTransForm.monto))
     const concepto = editTransForm.concepto || 'Transferencia entre personas'
+    const proposito = editTransForm.proposito || 'corte_caja'
     const [r1, r2] = await Promise.all([
-      supabase.from('caja_movimientos').update({ persona_id: editTransForm.de_persona_id, monto: -monto, concepto }).eq('id', editTransForm.salidaId),
-      supabase.from('caja_movimientos').update({ persona_id: editTransForm.a_persona_id,  monto,        concepto }).eq('id', editTransForm.entradaId),
+      supabase.from('caja_movimientos').update({ persona_id: editTransForm.de_persona_id, monto: -monto, concepto, referencia_tipo: proposito }).eq('id', editTransForm.salidaId),
+      supabase.from('caja_movimientos').update({ persona_id: editTransForm.a_persona_id,  monto,        concepto, referencia_tipo: proposito }).eq('id', editTransForm.entradaId),
     ])
     const err = r1.error || r2.error
     if (err) { setEditTransSaving(false); setEditTransErr(err.message); return }
@@ -445,12 +465,14 @@ export default function Caja() {
         const gastosVis = gastosFiltro === 'gasto' ? soloGastos : gastosFiltro === 'inversion' ? inversiones : gastos
         const totalGastos    = Math.abs(soloGastos.reduce((a, g) => a + Number(g.monto), 0))
         const totalInversion = Math.abs(inversiones.reduce((a, g) => a + Number(g.monto), 0))
+        const totalReembolsos = Object.values(reembolsosPorPersona).reduce((a, b) => a + b, 0)
+        const totalNeto = Math.max(0, totalGastos - totalReembolsos)
         return (
         <div>
-          {/* KPI cards: gastos, inversiones, total */}
+          {/* KPI cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 18 }}>
             <div className="card" style={{ borderTop: '3px solid var(--red)' }}>
-              <div className="card-title">Gastos</div>
+              <div className="card-title">Gastos brutos</div>
               <div className="kpi-val" style={{ color: 'var(--red)', fontSize: 22 }}>{fmt(totalGastos)}</div>
               <div className="kpi-sub">{soloGastos.length} registros</div>
             </div>
@@ -459,12 +481,28 @@ export default function Caja() {
               <div className="kpi-val" style={{ color: '#7c3aed', fontSize: 22 }}>{fmt(totalInversion)}</div>
               <div className="kpi-sub">{inversiones.length} registros</div>
             </div>
+            {totalReembolsos > 0 && (
+              <div className="card" style={{ borderTop: '3px solid var(--ok)' }}>
+                <div className="card-title">Reembolsos</div>
+                <div className="kpi-val" style={{ color: 'var(--ok)', fontSize: 22 }}>+{fmt(totalReembolsos)}</div>
+                <div className="kpi-sub">cubiertos por transfer</div>
+              </div>
+            )}
             <div className="card" style={{ borderTop: '3px solid var(--forest)' }}>
-              <div className="card-title">Total salidas</div>
-              <div className="kpi-val" style={{ color: 'var(--forest)', fontSize: 22 }}>{fmt(totalGastos + totalInversion)}</div>
-              <div className="kpi-sub">{gastos.length} registros</div>
+              <div className="card-title">{totalReembolsos > 0 ? 'Gastos netos' : 'Total salidas'}</div>
+              <div className="kpi-val" style={{ color: 'var(--forest)', fontSize: 22 }}>{fmt(totalNeto + totalInversion)}</div>
+              <div className="kpi-sub">{gastos.length} registros{totalReembolsos > 0 ? ' · con reembolsos' : ''}</div>
             </div>
           </div>
+          {/* Reembolsos por persona */}
+          {totalReembolsos > 0 && (
+            <div style={{ marginBottom: 14, padding: '10px 14px', background: 'var(--ok-s)', borderRadius: 8, fontSize: 13, color: 'var(--ok-t)', display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+              <span style={{ fontWeight: 600 }}>Reembolsos recibidos:</span>
+              {personas.filter(p => reembolsosPorPersona[p.id]).map(p => (
+                <span key={p.id}>{p.nombre}: <strong>{fmt(reembolsosPorPersona[p.id])}</strong></span>
+              ))}
+            </div>
+          )}
 
           {/* Controles: filtro tipo + toggle vista */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -617,20 +655,34 @@ export default function Caja() {
                     <th>Fecha</th>
                     <th>De</th>
                     <th>A</th>
+                    <th>Propósito</th>
                     <th>Concepto</th>
                     <th className="txt-right">Monto</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {transferencias.length === 0 && <tr><td colSpan={6} className="empty">Sin transferencias registradas</td></tr>}
-                  {transferencias.map((t, i) => (
+                  {transferencias.length === 0 && <tr><td colSpan={7} className="empty">Sin transferencias registradas</td></tr>}
+                  {transferencias.map((t, i) => {
+                    const proposito = TRANS_PROPOSITOS.find(p => p.value === t.salida?.referencia_tipo)
+                    const propColors = {
+                      corte_caja:        { bg: 'var(--amber-s)', color: 'var(--amber-t)' },
+                      reembolso_gasto:   { bg: 'var(--ok-s)',    color: 'var(--ok-t)' },
+                      reparto_ganancias: { bg: 'var(--info-s)',  color: 'var(--info-t)' },
+                    }
+                    const pc = propColors[t.salida?.referencia_tipo] || { bg: 'var(--cream-d)', color: 'var(--txt2)' }
+                    return (
                     <tr key={i}>
                       <td style={{ whiteSpace: 'nowrap', fontSize: 12, color: 'var(--txt3)' }}>
                         {t.salida && new Date(t.salida.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
                       </td>
                       <td style={{ fontWeight: 500, color: 'var(--red-t)' }}>{t.salida?.personas_caja?.nombre || '—'}</td>
                       <td style={{ fontWeight: 500, color: 'var(--ok-t)' }}>{t.entrada?.personas_caja?.nombre || '—'}</td>
+                      <td>
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: pc.bg, color: pc.color, whiteSpace: 'nowrap' }}>
+                          {proposito?.label || t.salida?.referencia_tipo || '—'}
+                        </span>
+                      </td>
                       <td style={{ color: 'var(--txt2)', fontSize: 13 }}>{t.salida?.concepto || '—'}</td>
                       <td className="txt-right mono" style={{ fontWeight: 600 }}>{fmt(Math.abs(t.salida?.monto || 0))}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>
@@ -640,7 +692,7 @@ export default function Caja() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>
@@ -808,7 +860,21 @@ export default function Caja() {
                 <input type="number" className="form-input" value={transForm.monto} onChange={e => setTransForm(f => ({ ...f, monto: e.target.value }))} placeholder="0.00" min="0" step="0.01" />
               </div>
               <div className="form-group">
-                <label className="form-label">Concepto</label>
+                <label className="form-label">Propósito *</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {TRANS_PROPOSITOS.map(p => (
+                    <label key={p.value} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 12px', borderRadius: 8, border: `1.5px solid ${transForm.proposito === p.value ? 'var(--forest)' : 'var(--bdr)'}`, background: transForm.proposito === p.value ? 'var(--forest-s)' : 'transparent', cursor: 'pointer', transition: 'all .15s' }}>
+                      <input type="radio" name="proposito" value={p.value} checked={transForm.proposito === p.value} onChange={() => setTransForm(f => ({ ...f, proposito: p.value }))} style={{ marginTop: 2, accentColor: 'var(--forest)' }} />
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--txt)' }}>{p.label}</div>
+                        <div style={{ fontSize: 11.5, color: 'var(--txt3)' }}>{p.desc}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Concepto (opcional)</label>
                 <input className="form-input" value={transForm.concepto} onChange={e => setTransForm(f => ({ ...f, concepto: e.target.value }))} placeholder="Ej: Entrega efectivo del día" />
               </div>
               {transErr && <div style={{ color: 'var(--red)', fontSize: 13 }}>{transErr}</div>}
@@ -893,7 +959,21 @@ export default function Caja() {
                 <input type="number" className="form-input" value={editTransForm.monto} onChange={e => setEditTransForm(f => ({ ...f, monto: e.target.value }))} placeholder="0.00" min="0" step="0.01" />
               </div>
               <div className="form-group">
-                <label className="form-label">Concepto</label>
+                <label className="form-label">Propósito *</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {TRANS_PROPOSITOS.map(p => (
+                    <label key={p.value} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 12px', borderRadius: 8, border: `1.5px solid ${editTransForm.proposito === p.value ? 'var(--forest)' : 'var(--bdr)'}`, background: editTransForm.proposito === p.value ? 'var(--forest-s)' : 'transparent', cursor: 'pointer', transition: 'all .15s' }}>
+                      <input type="radio" name="edit_proposito" value={p.value} checked={editTransForm.proposito === p.value} onChange={() => setEditTransForm(f => ({ ...f, proposito: p.value }))} style={{ marginTop: 2, accentColor: 'var(--forest)' }} />
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--txt)' }}>{p.label}</div>
+                        <div style={{ fontSize: 11.5, color: 'var(--txt3)' }}>{p.desc}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Concepto (opcional)</label>
                 <input className="form-input" value={editTransForm.concepto} onChange={e => setEditTransForm(f => ({ ...f, concepto: e.target.value }))} placeholder="Ej: Entrega efectivo del día" />
               </div>
               {editTransErr && <div style={{ color: 'var(--red)', fontSize: 13 }}>{editTransErr}</div>}
