@@ -10,6 +10,21 @@ const MOTIVOS = [
   { value: 'otro',           label: 'Otro' },
 ]
 
+const CAT_LABELS = ['Operación', 'Logística', 'Marketing', 'Administrativo', 'Otro']
+const CAT_COLORS = {
+  'Operación':      '#2B6B50',
+  'Logística':      '#2D6A9F',
+  'Marketing':      '#be185d',
+  'Administrativo': '#A0692A',
+  'Otro':           '#9E9080',
+}
+function detectCat(concepto) {
+  for (const cat of CAT_LABELS) {
+    if (concepto?.startsWith(cat)) return cat
+  }
+  return 'Otro'
+}
+
 function fmt(n) {
   return '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
@@ -89,6 +104,7 @@ export default function Caja() {
 
   const [histPersona, setHistPersona] = useState('')
   const [histTipo, setHistTipo]       = useState('')
+  const [gastosView, setGastosView]   = useState('tabla')
 
   async function load() {
     const [{ data: p }, { data: m }] = await Promise.all([
@@ -117,6 +133,28 @@ export default function Caja() {
   const totalGeneral = balances.reduce((a, b) => a + b.saldo, 0)
 
   const gastos = useMemo(() => movimientos.filter(m => m.tipo === 'gasto'), [movimientos])
+
+  const gastosPorCat = useMemo(() => {
+    const map = {}
+    for (const g of gastos) {
+      const cat = detectCat(g.concepto)
+      map[cat] = (map[cat] || 0) + Math.abs(Number(g.monto))
+    }
+    return CAT_LABELS.map(cat => ({ cat, total: map[cat] || 0 }))
+      .filter(x => x.total > 0)
+      .sort((a, b) => b.total - a.total)
+  }, [gastos])
+
+  const gastosPorCatPersona = useMemo(() => {
+    const map = {}
+    for (const g of gastos) {
+      const cat = detectCat(g.concepto)
+      const persona = g.personas_caja?.nombre || 'Sin asignar'
+      if (!map[cat]) map[cat] = {}
+      map[cat][persona] = (map[cat][persona] || 0) + Math.abs(Number(g.monto))
+    }
+    return map
+  }, [gastos])
 
   const transferencias = useMemo(() => {
     const map = {}
@@ -267,55 +305,144 @@ export default function Caja() {
       {/* ── GASTOS ── */}
       {tab === 'gastos' && (
         <div>
-          <div style={{ display: 'flex', gap: 14, marginBottom: 18, flexWrap: 'wrap' }}>
+          {/* KPI por persona + toggle de vista */}
+          <div style={{ display: 'flex', gap: 14, marginBottom: 18, flexWrap: 'wrap', alignItems: 'stretch' }}>
             {balances.map(p => {
               const total = Math.abs(gastos.filter(g => g.persona_id === p.id).reduce((a, g) => a + Number(g.monto), 0))
               return (
-                <div key={p.id} className="card" style={{ flex: 1, minWidth: 150 }}>
+                <div key={p.id} className="card" style={{ flex: 1, minWidth: 140 }}>
                   <div className="card-title">{p.nombre}</div>
                   <div className="kpi-val" style={{ color: 'var(--red)', fontSize: 22 }}>{fmt(total)}</div>
                   <div className="kpi-sub">total gastado</div>
                 </div>
               )
             })}
-          </div>
-          <div className="card">
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Pagado por</th>
-                    <th>Concepto</th>
-                    <th className="txt-right">Monto</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {gastos.length === 0 && <tr><td colSpan={4} className="empty">Sin gastos registrados</td></tr>}
-                  {gastos.map(g => (
-                    <tr key={g.id}>
-                      <td style={{ whiteSpace: 'nowrap', fontSize: 12, color: 'var(--txt3)' }}>
-                        {new Date(g.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </td>
-                      <td style={{ fontWeight: 500 }}>{g.personas_caja?.nombre || '—'}</td>
-                      <td style={{ color: 'var(--txt2)', fontSize: 13 }}>{g.concepto}</td>
-                      <td className="txt-right mono" style={{ fontWeight: 600, color: 'var(--red)' }}>{fmt(Math.abs(g.monto))}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                {gastos.length > 0 && (
-                  <tfoot>
-                    <tr>
-                      <td colSpan={3} style={{ fontWeight: 600, color: 'var(--txt2)', paddingTop: 10 }}>Total gastos</td>
-                      <td className="txt-right mono" style={{ fontWeight: 700, color: 'var(--red)', paddingTop: 10 }}>
-                        {fmt(Math.abs(gastos.reduce((a, g) => a + Number(g.monto), 0)))}
-                      </td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
+            <div className="card" style={{ flex: 1, minWidth: 140 }}>
+              <div className="card-title">Total general</div>
+              <div className="kpi-val" style={{ color: 'var(--red)', fontSize: 22 }}>
+                {fmt(Math.abs(gastos.reduce((a, g) => a + Number(g.monto), 0)))}
+              </div>
+              <div className="kpi-sub">{gastos.length} registros</div>
             </div>
           </div>
+
+          {/* Toggle tabla / gráfica */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+            {[['tabla', '☰ Tabla'], ['grafica', '▦ Gráfica']].map(([v, lbl]) => (
+              <button
+                key={v}
+                onClick={() => setGastosView(v)}
+                className={gastosView === v ? 'btn btn-amber btn-sm' : 'btn btn-ghost btn-sm'}
+              >
+                {lbl}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Vista tabla ── */}
+          {gastosView === 'tabla' && (
+            <div className="card">
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Pagado por</th>
+                      <th>Concepto</th>
+                      <th className="txt-right">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gastos.length === 0 && <tr><td colSpan={4} className="empty">Sin gastos registrados</td></tr>}
+                    {gastos.map(g => (
+                      <tr key={g.id}>
+                        <td style={{ whiteSpace: 'nowrap', fontSize: 12, color: 'var(--txt3)' }}>
+                          {new Date(g.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </td>
+                        <td style={{ fontWeight: 500 }}>{g.personas_caja?.nombre || '—'}</td>
+                        <td style={{ color: 'var(--txt2)', fontSize: 13 }}>{g.concepto}</td>
+                        <td className="txt-right mono" style={{ fontWeight: 600, color: 'var(--red)' }}>{fmt(Math.abs(g.monto))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  {gastos.length > 0 && (
+                    <tfoot>
+                      <tr>
+                        <td colSpan={3} style={{ fontWeight: 600, color: 'var(--txt2)', paddingTop: 10 }}>Total gastos</td>
+                        <td className="txt-right mono" style={{ fontWeight: 700, color: 'var(--red)', paddingTop: 10 }}>
+                          {fmt(Math.abs(gastos.reduce((a, g) => a + Number(g.monto), 0)))}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── Vista gráfica ── */}
+          {gastosView === 'grafica' && (
+            <div>
+              {/* Cards por categoría */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10, marginBottom: 18 }}>
+                {gastosPorCat.map(({ cat, total }) => {
+                  const totalGenGastos = gastosPorCat.reduce((a, x) => a + x.total, 0)
+                  const pct = totalGenGastos > 0 ? ((total / totalGenGastos) * 100).toFixed(1) : '0.0'
+                  return (
+                    <div key={cat} className="card" style={{ borderTop: `3px solid ${CAT_COLORS[cat]}`, padding: '14px 16px' }}>
+                      <div className="card-title">{cat}</div>
+                      <div style={{ fontSize: 19, fontWeight: 700, color: CAT_COLORS[cat], fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }}>{fmt(total)}</div>
+                      <div style={{ fontSize: 11, color: 'var(--txt3)', marginTop: 4 }}>{pct}% del total</div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Barras horizontales */}
+              <div className="card">
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt3)', marginBottom: 18, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                  Desglose por categoría
+                </div>
+                {gastosPorCat.length === 0 && <div className="empty" style={{ padding: '24px 0' }}>Sin gastos registrados</div>}
+                {gastosPorCat.map(({ cat, total }) => {
+                  const maxTotal = Math.max(...gastosPorCat.map(x => x.total), 1)
+                  const pct = (total / maxTotal) * 100
+                  const personas = gastosPorCatPersona[cat] || {}
+                  const color = CAT_COLORS[cat]
+                  return (
+                    <div key={cat} style={{ marginBottom: 20 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 10, height: 10, borderRadius: 2, background: color, flexShrink: 0 }} />
+                          <span style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--txt)' }}>{cat}</span>
+                        </div>
+                        <span className="mono" style={{ fontSize: 13.5, fontWeight: 700, color }}>
+                          {fmt(total)}
+                        </span>
+                      </div>
+                      {/* Barra */}
+                      <div style={{ height: 12, background: 'var(--cream-d)', borderRadius: 100, overflow: 'hidden', marginBottom: 6 }}>
+                        <div
+                          style={{
+                            height: '100%', width: `${pct}%`, background: color,
+                            borderRadius: 100, transition: 'width .5s cubic-bezier(.4,0,.2,1)',
+                          }}
+                        />
+                      </div>
+                      {/* Desglose por persona */}
+                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                        {Object.entries(personas).sort((a, b) => b[1] - a[1]).map(([nombre, monto]) => (
+                          <span key={nombre} style={{ fontSize: 11.5, color: 'var(--txt3)' }}>
+                            {nombre}:&nbsp;<strong style={{ color: 'var(--txt2)', fontWeight: 600 }}>{fmt(monto)}</strong>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
