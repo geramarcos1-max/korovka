@@ -177,91 +177,217 @@ function ProductosForm({ its, onAdd, onRemove, onUpd, productos }) {
 
 function PrintRemision({ venta, items, cliente, notas, conIva, onClose }) {
   const ref = useRef()
-  function print() {
-    const w = window.open('', '_blank')
-    w.document.write('<html><head><title>Nota de Remisión</title>')
-    w.document.write('<style>body{font-family:sans-serif;padding:20px;max-width:600px;margin:0 auto}')
-    w.document.write('table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:6px 10px;font-size:13px}')
-    w.document.write('th{background:#f5f5f5;font-weight:600}.right{text-align:right}')
-    w.document.write('.total-row td{font-weight:700;background:#fef8ec}')
-    w.document.write('</style></head><body>')
-    w.document.write(ref.current.innerHTML)
-    w.document.write('</body></html>')
-    w.document.close()
-    w.print()
-  }
   const sub = items.reduce((a, i) => a + i.subtotal, 0)
   const iva = conIva ? sub * IVA_RATE : 0
   const total = sub + iva
+  const fechaLarga = venta.fecha
+    ? new Date(venta.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })
+    : ''
+
+  function printTicket() {
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<title>Ticket Korovka — ${venta.folio}</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff;display:flex;justify-content:center;padding:32px 16px}
+  .ticket{width:100%;max-width:400px;background:#fff}
+  .hdr{background:#063831;color:#F6EFDF;padding:24px 22px 20px;border-radius:10px 10px 0 0}
+  .hdr-top{display:flex;justify-content:space-between;align-items:flex-start}
+  .brand{font-family:'Playfair Display',Georgia,serif;font-size:26px;font-weight:700;letter-spacing:.04em;line-height:1}
+  .brand-sub{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:rgba(246,239,223,.55);margin-top:5px;font-weight:500}
+  .ticket-label{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:rgba(246,239,223,.55);font-weight:500;text-align:right}
+  .folio{font-family:monospace;font-size:13px;color:#F6EFDF;font-weight:600;margin-top:4px;text-align:right}
+  .fecha{font-size:11px;color:rgba(246,239,223,.65);margin-top:2px;text-align:right}
+  .body{padding:18px 22px;border:1px solid #e8e2d9;border-top:none;border-radius:0 0 10px 10px}
+  .cliente-block{padding:12px 0 14px;border-bottom:1px dashed #ddd6ca}
+  .lbl{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:4px}
+  .cliente-nombre{font-size:14px;font-weight:600;color:#063831}
+  .cliente-sub{font-size:11px;color:#888;margin-top:2px}
+  .items{width:100%;border-collapse:collapse;margin:14px 0}
+  .items thead th{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#999;font-weight:600;padding:0 0 8px;border-bottom:1px solid #e8e2d9}
+  .items thead th:first-child{text-align:left}
+  .items thead th:not(:first-child){text-align:right}
+  .items tbody td{padding:9px 0;border-bottom:1px solid #f0ece6;font-size:13px;color:#2d2d2d;vertical-align:top}
+  .items tbody td:first-child{text-align:left;font-weight:500}
+  .items tbody td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+  .items tbody td .qty{font-size:11px;color:#888;margin-top:1px}
+  .totals{padding-top:2px}
+  .total-row{display:flex;justify-content:space-between;font-size:12px;color:#666;padding:3px 0}
+  .total-final{display:flex;justify-content:space-between;align-items:center;background:#063831;color:#F6EFDF;padding:12px 14px;border-radius:8px;margin-top:10px}
+  .total-final .t-lbl{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;opacity:.75}
+  .total-final .t-val{font-family:'Playfair Display',Georgia,serif;font-size:22px;font-weight:700}
+  .notas{margin-top:14px;padding:10px 12px;background:#f9f6f1;border-radius:7px;font-size:12px;color:#666;border-left:2px solid #d4c9b4}
+  .sigs{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:22px}
+  .sig-line{border-top:1px solid #ccc;padding-top:7px;text-align:center;font-size:10px;color:#aaa;letter-spacing:.05em}
+  .footer{margin-top:18px;text-align:center;padding-top:14px;border-top:1px dashed #ddd6ca}
+  .footer-thanks{font-family:'Playfair Display',Georgia,serif;font-size:13px;color:#063831;font-weight:600}
+  .footer-sub{font-size:10px;color:#aaa;margin-top:4px;letter-spacing:.04em}
+  @media print{body{padding:0}@page{margin:12mm}}
+</style>
+</head>
+<body>
+<div class="ticket">
+  <div class="hdr">
+    <div class="hdr-top">
+      <div>
+        <div class="brand">Korovka</div>
+        <div class="brand-sub">Productos Lácteos</div>
+      </div>
+      <div>
+        <div class="ticket-label">Ticket de venta</div>
+        <div class="folio">${venta.folio}</div>
+        <div class="fecha">${fechaLarga}</div>
+      </div>
+    </div>
+  </div>
+  <div class="body">
+    <div class="cliente-block">
+      <div class="lbl">Cliente</div>
+      <div class="cliente-nombre">${cliente ? cliente.nombre : 'Cliente particular' + (notas ? ' — ' + notas : '')}</div>
+      ${cliente?.rfc ? `<div class="cliente-sub">RFC: ${cliente.rfc}</div>` : ''}
+      ${cliente?.direccion ? `<div class="cliente-sub">${cliente.direccion}</div>` : ''}
+    </div>
+    <table class="items">
+      <thead><tr>
+        <th>Producto</th>
+        <th>Precio</th>
+        <th>Total</th>
+      </tr></thead>
+      <tbody>
+        ${items.map(i => `<tr>
+          <td>${i.producto_nombre}<div class="qty">${i.cantidad} ${i.unidad || 'pza'}</div></td>
+          <td>${fmt(i.precio_unitario)}</td>
+          <td>${fmt(i.subtotal)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="totals">
+      <div class="total-row"><span>Subtotal</span><span>${fmt(sub)}</span></div>
+      ${conIva ? `<div class="total-row"><span>IVA (16%)</span><span>${fmt(iva)}</span></div>` : ''}
+      <div class="total-final">
+        <div class="t-lbl">Total</div>
+        <div class="t-val">${fmt(total)}</div>
+      </div>
+    </div>
+    ${notas && !(!cliente) ? `<div class="notas"><strong>Nota:</strong> ${notas}</div>` : ''}
+    <div class="sigs">
+      <div class="sig-line">Entregó</div>
+      <div class="sig-line">Recibió</div>
+    </div>
+    <div class="footer">
+      <div class="footer-thanks">¡Gracias por tu preferencia!</div>
+      <div class="footer-sub">Korovka · Productos Lácteos</div>
+    </div>
+  </div>
+</div>
+</body></html>`
+    const w = window.open('', '_blank')
+    w.document.write(html)
+    w.document.close()
+    setTimeout(() => w.print(), 600)
+  }
+
   return (
     <div className="modal-overlay">
-      <div className="modal" style={{ maxWidth: 640 }}>
+      <div className="modal" style={{ maxWidth: 480 }}>
         <div className="modal-head">
-          <span className="modal-title">Nota de Remisión</span>
+          <span className="modal-title">Ticket de venta</span>
           <div className="gap-8">
-            <button className="btn btn-amber btn-sm" onClick={print}>🖨 Imprimir</button>
+            <button className="btn btn-amber btn-sm" onClick={printTicket}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ marginRight: 5, verticalAlign: 'middle' }}><path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm1-4h.01"/></svg>
+              Imprimir / Descargar
+            </button>
             <button className="modal-close" onClick={onClose}>×</button>
           </div>
         </div>
-        <div className="modal-body" ref={ref}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-            <div>
-              <div style={{ fontFamily: 'Georgia,serif', fontSize: 26, fontWeight: 700, letterSpacing: 2 }}>KOROVKA</div>
-              <div style={{ fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: '#888', fontWeight: 600 }}>Productos Lácteos</div>
+        <div className="modal-body" style={{ padding: 0 }}>
+          {/* Ticket preview */}
+          <div style={{ background: '#f5f0e8', padding: '20px 24px 24px', display: 'flex', justifyContent: 'center' }}>
+            <div style={{ width: '100%', maxWidth: 360, background: '#fff', borderRadius: 10, boxShadow: '0 4px 24px rgba(0,0,0,.12)', overflow: 'hidden' }}>
+              {/* Header */}
+              <div style={{ background: '#063831', color: '#F6EFDF', padding: '20px 20px 18px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <div style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: 22, fontWeight: 700, letterSpacing: '.03em', lineHeight: 1 }}>Korovka</div>
+                    <div style={{ fontSize: 8.5, letterSpacing: '.16em', textTransform: 'uppercase', color: 'rgba(246,239,223,.5)', marginTop: 5, fontWeight: 500 }}>Productos Lácteos</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 8.5, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(246,239,223,.5)', fontWeight: 500 }}>Ticket de venta</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#F6EFDF', fontWeight: 600, marginTop: 4 }}>{venta.folio}</div>
+                    <div style={{ fontSize: 10.5, color: 'rgba(246,239,223,.6)', marginTop: 2 }}>{fechaLarga}</div>
+                  </div>
+                </div>
+              </div>
+              {/* Body */}
+              <div style={{ padding: '14px 18px 18px' }}>
+                {/* Cliente */}
+                <div style={{ paddingBottom: 12, marginBottom: 2, borderBottom: '1px dashed #e0d9ce' }}>
+                  <div style={{ fontSize: 8.5, letterSpacing: '.1em', textTransform: 'uppercase', color: '#aaa', fontWeight: 600, marginBottom: 3 }}>Cliente</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#063831' }}>
+                    {cliente ? cliente.nombre : 'Cliente particular' + (notas ? ` — ${notas}` : '')}
+                  </div>
+                  {cliente?.rfc && <div style={{ fontSize: 10.5, color: '#888', marginTop: 1 }}>RFC: {cliente.rfc}</div>}
+                </div>
+                {/* Items */}
+                <table style={{ width: '100%', borderCollapse: 'collapse', margin: '10px 0' }}>
+                  <thead>
+                    <tr>
+                      {['Producto','Precio','Total'].map(h => (
+                        <th key={h} style={{ fontSize: 8.5, letterSpacing: '.1em', textTransform: 'uppercase', color: '#aaa', fontWeight: 600, padding: '0 0 7px', borderBottom: '1px solid #ede8e0', textAlign: h === 'Producto' ? 'left' : 'right' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((item, i) => (
+                      <tr key={i}>
+                        <td style={{ padding: '8px 0', borderBottom: '1px solid #f5f1eb', fontSize: 12, fontWeight: 500, color: '#222', verticalAlign: 'top' }}>
+                          {item.producto_nombre}
+                          <div style={{ fontSize: 10, color: '#aaa', marginTop: 1 }}>{item.cantidad} {item.unidad || 'pza'}</div>
+                        </td>
+                        <td style={{ padding: '8px 0', borderBottom: '1px solid #f5f1eb', fontSize: 12, color: '#555', textAlign: 'right', verticalAlign: 'top' }}>{fmt(item.precio_unitario)}</td>
+                        <td style={{ padding: '8px 0', borderBottom: '1px solid #f5f1eb', fontSize: 12, fontWeight: 500, color: '#222', textAlign: 'right', verticalAlign: 'top' }}>{fmt(item.subtotal)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {/* Totals */}
+                <div style={{ paddingTop: 2 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: '#777', padding: '3px 0' }}>
+                    <span>Subtotal</span><span>{fmt(sub)}</span>
+                  </div>
+                  {conIva && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: '#777', padding: '3px 0' }}>
+                      <span>IVA (16%)</span><span>{fmt(iva)}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#063831', color: '#F6EFDF', padding: '10px 13px', borderRadius: 7, marginTop: 9 }}>
+                    <span style={{ fontSize: 9.5, letterSpacing: '.12em', textTransform: 'uppercase', fontWeight: 600, opacity: .7 }}>Total</span>
+                    <span style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: 18, fontWeight: 700 }}>{fmt(total)}</span>
+                  </div>
+                </div>
+                {/* Notas */}
+                {notas && cliente && (
+                  <div style={{ marginTop: 12, padding: '8px 10px', background: '#f9f6f1', borderRadius: 6, fontSize: 11, color: '#777', borderLeft: '2px solid #d4c9b4' }}>
+                    <strong style={{ color: '#555' }}>Nota:</strong> {notas}
+                  </div>
+                )}
+                {/* Signatures */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginTop: 18 }}>
+                  {['Entregó', 'Recibió'].map(l => (
+                    <div key={l} style={{ borderTop: '1px solid #ccc', paddingTop: 6, textAlign: 'center', fontSize: 9.5, color: '#bbb', letterSpacing: '.05em' }}>{l}</div>
+                  ))}
+                </div>
+                {/* Footer */}
+                <div style={{ marginTop: 14, textAlign: 'center', paddingTop: 12, borderTop: '1px dashed #e0d9ce' }}>
+                  <div style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: 12, color: '#063831', fontWeight: 600 }}>¡Gracias por tu preferencia!</div>
+                  <div style={{ fontSize: 9.5, color: '#bbb', marginTop: 3, letterSpacing: '.04em' }}>Korovka · Productos Lácteos</div>
+                </div>
+              </div>
             </div>
-            <div style={{ textAlign: 'right', fontSize: 13 }}>
-              <div style={{ fontWeight: 700, fontSize: 16 }}>NOTA DE REMISIÓN</div>
-              <div style={{ fontFamily: 'monospace', color: '#1E3D2C', marginTop: 4 }}>#{venta.folio}</div>
-              <div style={{ color: '#888', fontSize: 12, marginTop: 2 }}>{venta.fecha}</div>
-            </div>
-          </div>
-          <hr style={{ border: 'none', borderTop: '1px solid #ddd', margin: '10px 0 14px' }} />
-          <div style={{ fontSize: 13, marginBottom: 14 }}>
-            <div style={{ fontWeight: 600, marginBottom: 2 }}>Cliente:</div>
-            {cliente ? (
-              <>
-                <div>{cliente.nombre}</div>
-                {cliente.rfc && <div style={{ color: '#888' }}>RFC: {cliente.rfc}</div>}
-                {cliente.direccion && <div style={{ color: '#888' }}>{cliente.direccion}</div>}
-              </>
-            ) : (
-              <div>Cliente particular{notas ? ` — ${notas}` : ''}</div>
-            )}
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Producto</th>
-                  <th style={{ textAlign: 'right' }}>Cantidad</th>
-                  <th style={{ textAlign: 'right' }}>Precio Unit.</th>
-                  <th style={{ textAlign: 'right' }}>Subtotal</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item, i) => (
-                  <tr key={i}>
-                    <td>{item.producto_nombre}</td>
-                    <td style={{ textAlign: 'right' }}>{item.cantidad} {item.unidad}</td>
-                    <td style={{ textAlign: 'right' }}>{fmt(item.precio_unitario)}</td>
-                    <td style={{ textAlign: 'right' }}>{fmt(item.subtotal)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr><td colSpan={3} style={{ textAlign: 'right' }}>Subtotal</td><td style={{ textAlign: 'right' }}>{fmt(sub)}</td></tr>
-                {conIva && <tr><td colSpan={3} style={{ textAlign: 'right' }}>IVA (16%)</td><td style={{ textAlign: 'right' }}>{fmt(iva)}</td></tr>}
-                <tr style={{ fontWeight: 700, background: '#fef8ec' }}>
-                  <td colSpan={3} style={{ textAlign: 'right' }}>TOTAL</td>
-                  <td style={{ textAlign: 'right' }}>{fmt(total)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-          {notas && <div style={{ marginTop: 14, fontSize: 13, color: '#666' }}><strong>Notas:</strong> {notas}</div>}
-          <div style={{ marginTop: 28, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, fontSize: 12, color: '#888' }}>
-            <div style={{ borderTop: '1px solid #ddd', paddingTop: 8, textAlign: 'center' }}>Entregó</div>
-            <div style={{ borderTop: '1px solid #ddd', paddingTop: 8, textAlign: 'center' }}>Recibió</div>
           </div>
         </div>
       </div>
@@ -612,7 +738,7 @@ export default function Ventas() {
                   <td><EstadoSelect v={v} onChange={cambiarEstado} /></td>
                   <td>
                     <div className="gap-8">
-                      <button className="btn btn-ghost btn-sm" onClick={() => openPrint(v)}>🖨 Remisión</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => openPrint(v)}>Ticket</button>
                       <button className="btn btn-ghost btn-sm" onClick={() => openEdit(v)}>Editar</button>
                       <button className="btn btn-red btn-sm"   onClick={() => eliminar(v)}>Eliminar</button>
                     </div>
