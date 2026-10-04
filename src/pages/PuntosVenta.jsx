@@ -279,7 +279,7 @@ export default function PuntosVenta() {
       {tab === 'entregas' && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
-            <button className="btn-primary" onClick={() => setEntregaModal({
+            <button className="btn btn-amber" onClick={() => setEntregaModal({
               folio: folio(), cliente_id: '', fecha: today(), items: [{ producto_id: '', cantidad: 1, precio_unitario: 0 }], notas: '', ocFile: null,
             })}>+ Nueva entrega</button>
           </div>
@@ -317,11 +317,11 @@ export default function PuntosVenta() {
                   <td>
                     <div style={{ display: 'flex', gap: 6 }}>
                       {e.estado !== 'pagada' && (
-                        <button className="btn-sm" onClick={() => setCobroModal({ entrega_id: e.id, folio: e.folio, pendiente: e.pendiente, fecha: today(), monto: e.pendiente, metodo: 'transferencia', notas: '' })}>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setCobroModal({ entrega_id: e.id, folio: e.folio, pendiente: e.pendiente, fecha: today(), monto: e.pendiente, metodo: 'transferencia', notas: '' })}>
                           Cobrar
                         </button>
                       )}
-                      <button className="btn-sm" onClick={() => setDevModal({ entrega_id: e.id, folio: e.folio, fecha: today(), motivo: 'perdida_vacio', notas: '', items: (e.pv_entrega_items || []).map(i => ({ producto_id: i.producto_id, nombre: i.producto?.nombre, cantidad: 0 })), pv_entrega_items: e.pv_entrega_items })}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setDevModal({ entrega_id: e.id, folio: e.folio, fecha: today(), motivo: 'perdida_vacio', notas: '', items: (e.pv_entrega_items || []).map(i => ({ producto_id: i.producto_id, nombre: i.producto?.nombre, cantidad: 0 })), pv_entrega_items: e.pv_entrega_items })}>
                         Devolución
                       </button>
                     </div>
@@ -363,7 +363,7 @@ export default function PuntosVenta() {
                   </td>
                   <td>
                     {!d.reposicion_completada && (
-                      <button className="btn-sm" onClick={() => marcarReposicion(d.id)}>Marcar repuesta</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => marcarReposicion(d.id)}>Marcar repuesta</button>
                     )}
                   </td>
                 </tr>
@@ -377,7 +377,7 @@ export default function PuntosVenta() {
       {tab === 'clientes' && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
-            <button className="btn-primary" onClick={() => setClienteModal({ nombre: '', contacto: '', telefono: '', email: '', rfc: '', direccion: '' })}>+ Nuevo cliente</button>
+            <button className="btn btn-amber" onClick={() => setClienteModal({ nombre: '', contacto: '', telefono: '', email: '', rfc: '', direccion: '' })}>+ Nuevo cliente</button>
           </div>
           <table className="data-table">
             <thead><tr><th>Nombre</th><th>Contacto</th><th>Teléfono</th><th>Email</th><th>RFC</th><th>Dirección</th></tr></thead>
@@ -430,7 +430,7 @@ export default function PuntosVenta() {
           <div style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <label className="form-label" style={{ margin: 0 }}>Productos</label>
-              <button className="btn-sm" onClick={() => setEntregaModal(m => ({ ...m, items: [...m.items, { producto_id: '', cantidad: 1, precio_unitario: 0 }] }))}>+ Agregar</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setEntregaModal(m => ({ ...m, items: [...m.items, { producto_id: '', cantidad: 1, precio_unitario: 0 }] }))}>+ Agregar</button>
             </div>
             {entregaModal.items.map((item, idx) => (
               <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 100px 28px', gap: 8, marginBottom: 6 }}>
@@ -468,8 +468,8 @@ export default function PuntosVenta() {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <button className="btn-secondary" onClick={() => setEntregaModal(null)}>Cancelar</button>
-            <button className="btn-primary" disabled={saving || !entregaModal.cliente_id || entregaModal.items.filter(i => i.producto_id && Number(i.cantidad) > 0).length === 0}
+            <button className="btn btn-ghost" onClick={() => setEntregaModal(null)}>Cancelar</button>
+            <button className="btn btn-amber" disabled={saving || !entregaModal.cliente_id || entregaModal.items.filter(i => i.producto_id && Number(i.cantidad) > 0).length === 0}
               onClick={() => saveEntrega({ ...entregaModal, items: entregaModal.items.filter(i => i.producto_id && Number(i.cantidad) > 0) })}>
               {saving ? 'Guardando…' : 'Registrar entrega'}
             </button>
@@ -507,8 +507,8 @@ export default function PuntosVenta() {
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-            <button className="btn-secondary" onClick={() => setCobroModal(null)}>Cancelar</button>
-            <button className="btn-primary" disabled={saving || !cobroModal.monto || Number(cobroModal.monto) <= 0} onClick={() => saveCobro(cobroModal)}>
+            <button className="btn btn-ghost" onClick={() => setCobroModal(null)}>Cancelar</button>
+            <button className="btn btn-amber" disabled={saving || !cobroModal.monto || Number(cobroModal.monto) <= 0} onClick={() => saveCobro(cobroModal)}>
               {saving ? 'Guardando…' : 'Registrar cobro'}
             </button>
           </div>
@@ -550,8 +550,8 @@ export default function PuntosVenta() {
             <textarea className="form-input" rows={2} value={devModal.notas} onChange={e => setDevModal(m => ({ ...m, notas: e.target.value }))} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <button className="btn-secondary" onClick={() => setDevModal(null)}>Cancelar</button>
-            <button className="btn-primary" disabled={saving || devModal.items.filter(i => Number(i.cantidad) > 0).length === 0}
+            <button className="btn btn-ghost" onClick={() => setDevModal(null)}>Cancelar</button>
+            <button className="btn btn-amber" disabled={saving || devModal.items.filter(i => Number(i.cantidad) > 0).length === 0}
               onClick={() => saveDev({ ...devModal, items: devModal.items.filter(i => Number(i.cantidad) > 0) })}>
               {saving ? 'Guardando…' : 'Registrar devolución'}
             </button>
@@ -579,8 +579,8 @@ export default function PuntosVenta() {
             ))}
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-            <button className="btn-secondary" onClick={() => setClienteModal(null)}>Cancelar</button>
-            <button className="btn-primary" disabled={saving || !clienteModal.nombre} onClick={() => saveCliente(clienteModal)}>
+            <button className="btn btn-ghost" onClick={() => setClienteModal(null)}>Cancelar</button>
+            <button className="btn btn-amber" disabled={saving || !clienteModal.nombre} onClick={() => saveCliente(clienteModal)}>
               {saving ? 'Guardando…' : 'Guardar cliente'}
             </button>
           </div>
