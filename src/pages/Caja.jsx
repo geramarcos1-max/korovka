@@ -66,6 +66,7 @@ function TabBtn({ id, active, onClick, children }) {
 
 const emptyGasto = {
   fecha: new Date().toISOString().slice(0, 10),
+  tipo_registro: 'gasto',
   motivo: 'operacion',
   monto: '',
   persona_id: '',
@@ -102,9 +103,10 @@ export default function Caja() {
   const [personaErr, setPersonaErr]       = useState('')
   const [personaSaving, setPersonaSaving] = useState(false)
 
-  const [histPersona, setHistPersona] = useState('')
-  const [histTipo, setHistTipo]       = useState('')
-  const [gastosView, setGastosView]   = useState('tabla')
+  const [histPersona, setHistPersona]   = useState('')
+  const [histTipo, setHistTipo]         = useState('')
+  const [gastosView, setGastosView]     = useState('tabla')
+  const [gastosFiltro, setGastosFiltro] = useState('todos')
 
   async function load() {
     const [{ data: p }, { data: m }] = await Promise.all([
@@ -133,6 +135,8 @@ export default function Caja() {
   const totalGeneral = balances.reduce((a, b) => a + b.saldo, 0)
 
   const gastos = useMemo(() => movimientos.filter(m => m.tipo === 'gasto'), [movimientos])
+  const inversiones = useMemo(() => gastos.filter(g => g.referencia_tipo === 'inversion'), [gastos])
+  const soloGastos  = useMemo(() => gastos.filter(g => g.referencia_tipo !== 'inversion'), [gastos])
 
   const gastosPorCat = useMemo(() => {
     const map = {}
@@ -185,7 +189,7 @@ export default function Caja() {
       tipo: 'gasto',
       monto: -Math.abs(Number(gastoForm.monto)),
       concepto,
-      referencia_tipo: 'gasto',
+      referencia_tipo: gastoForm.tipo_registro,
       creado_por: profile?.id,
     })
     if (error) { setGastoSaving(false); setGastoErr(error.message); return }
@@ -303,39 +307,39 @@ export default function Caja() {
       )}
 
       {/* ── GASTOS ── */}
-      {tab === 'gastos' && (
+      {tab === 'gastos' && (() => {
+        const gastosVis = gastosFiltro === 'gasto' ? soloGastos : gastosFiltro === 'inversion' ? inversiones : gastos
+        const totalGastos    = Math.abs(soloGastos.reduce((a, g) => a + Number(g.monto), 0))
+        const totalInversion = Math.abs(inversiones.reduce((a, g) => a + Number(g.monto), 0))
+        return (
         <div>
-          {/* KPI por persona + toggle de vista */}
-          <div style={{ display: 'flex', gap: 14, marginBottom: 18, flexWrap: 'wrap', alignItems: 'stretch' }}>
-            {balances.map(p => {
-              const total = Math.abs(gastos.filter(g => g.persona_id === p.id).reduce((a, g) => a + Number(g.monto), 0))
-              return (
-                <div key={p.id} className="card" style={{ flex: 1, minWidth: 140 }}>
-                  <div className="card-title">{p.nombre}</div>
-                  <div className="kpi-val" style={{ color: 'var(--red)', fontSize: 22 }}>{fmt(total)}</div>
-                  <div className="kpi-sub">total gastado</div>
-                </div>
-              )
-            })}
-            <div className="card" style={{ flex: 1, minWidth: 140 }}>
-              <div className="card-title">Total general</div>
-              <div className="kpi-val" style={{ color: 'var(--red)', fontSize: 22 }}>
-                {fmt(Math.abs(gastos.reduce((a, g) => a + Number(g.monto), 0)))}
-              </div>
+          {/* KPI cards: gastos, inversiones, total */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 18 }}>
+            <div className="card" style={{ borderTop: '3px solid var(--red)' }}>
+              <div className="card-title">Gastos</div>
+              <div className="kpi-val" style={{ color: 'var(--red)', fontSize: 22 }}>{fmt(totalGastos)}</div>
+              <div className="kpi-sub">{soloGastos.length} registros</div>
+            </div>
+            <div className="card" style={{ borderTop: '3px solid #7c3aed' }}>
+              <div className="card-title">Inversiones</div>
+              <div className="kpi-val" style={{ color: '#7c3aed', fontSize: 22 }}>{fmt(totalInversion)}</div>
+              <div className="kpi-sub">{inversiones.length} registros</div>
+            </div>
+            <div className="card" style={{ borderTop: '3px solid var(--forest)' }}>
+              <div className="card-title">Total salidas</div>
+              <div className="kpi-val" style={{ color: 'var(--forest)', fontSize: 22 }}>{fmt(totalGastos + totalInversion)}</div>
               <div className="kpi-sub">{gastos.length} registros</div>
             </div>
           </div>
 
-          {/* Toggle tabla / gráfica */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+          {/* Controles: filtro tipo + toggle vista */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+            {[['todos','Todos'], ['gasto','Solo gastos'], ['inversion','Solo inversiones']].map(([v, lbl]) => (
+              <button key={v} onClick={() => setGastosFiltro(v)} className={gastosFiltro === v ? 'btn btn-amber btn-sm' : 'btn btn-ghost btn-sm'}>{lbl}</button>
+            ))}
+            <div style={{ width: 1, background: 'var(--bdr)', margin: '0 4px' }} />
             {[['tabla', '☰ Tabla'], ['grafica', '▦ Gráfica']].map(([v, lbl]) => (
-              <button
-                key={v}
-                onClick={() => setGastosView(v)}
-                className={gastosView === v ? 'btn btn-amber btn-sm' : 'btn btn-ghost btn-sm'}
-              >
-                {lbl}
-              </button>
+              <button key={v} onClick={() => setGastosView(v)} className={gastosView === v ? 'btn btn-amber btn-sm' : 'btn btn-ghost btn-sm'}>{lbl}</button>
             ))}
           </div>
 
@@ -347,30 +351,43 @@ export default function Caja() {
                   <thead>
                     <tr>
                       <th>Fecha</th>
+                      <th>Tipo</th>
                       <th>Pagado por</th>
                       <th>Concepto</th>
                       <th className="txt-right">Monto</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {gastos.length === 0 && <tr><td colSpan={4} className="empty">Sin gastos registrados</td></tr>}
-                    {gastos.map(g => (
-                      <tr key={g.id}>
-                        <td style={{ whiteSpace: 'nowrap', fontSize: 12, color: 'var(--txt3)' }}>
-                          {new Date(g.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
-                        </td>
-                        <td style={{ fontWeight: 500 }}>{g.personas_caja?.nombre || '—'}</td>
-                        <td style={{ color: 'var(--txt2)', fontSize: 13 }}>{g.concepto}</td>
-                        <td className="txt-right mono" style={{ fontWeight: 600, color: 'var(--red)' }}>{fmt(Math.abs(g.monto))}</td>
-                      </tr>
-                    ))}
+                    {gastosVis.length === 0 && <tr><td colSpan={5} className="empty">Sin registros</td></tr>}
+                    {gastosVis.map(g => {
+                      const esInversion = g.referencia_tipo === 'inversion'
+                      return (
+                        <tr key={g.id}>
+                          <td style={{ whiteSpace: 'nowrap', fontSize: 12, color: 'var(--txt3)' }}>
+                            {new Date(g.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </td>
+                          <td>
+                            <span style={{
+                              fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99,
+                              background: esInversion ? '#ede9fe' : 'var(--red-s)',
+                              color: esInversion ? '#7c3aed' : 'var(--red-t)',
+                            }}>
+                              {esInversion ? 'Inversión' : 'Gasto'}
+                            </span>
+                          </td>
+                          <td style={{ fontWeight: 500 }}>{g.personas_caja?.nombre || '—'}</td>
+                          <td style={{ color: 'var(--txt2)', fontSize: 13 }}>{g.concepto}</td>
+                          <td className="txt-right mono" style={{ fontWeight: 600, color: esInversion ? '#7c3aed' : 'var(--red)' }}>{fmt(Math.abs(g.monto))}</td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
-                  {gastos.length > 0 && (
+                  {gastosVis.length > 0 && (
                     <tfoot>
                       <tr>
-                        <td colSpan={3} style={{ fontWeight: 600, color: 'var(--txt2)', paddingTop: 10 }}>Total gastos</td>
-                        <td className="txt-right mono" style={{ fontWeight: 700, color: 'var(--red)', paddingTop: 10 }}>
-                          {fmt(Math.abs(gastos.reduce((a, g) => a + Number(g.monto), 0)))}
+                        <td colSpan={4} style={{ fontWeight: 600, color: 'var(--txt2)', paddingTop: 10 }}>Total</td>
+                        <td className="txt-right mono" style={{ fontWeight: 700, color: 'var(--txt)', paddingTop: 10 }}>
+                          {fmt(Math.abs(gastosVis.reduce((a, g) => a + Number(g.monto), 0)))}
                         </td>
                       </tr>
                     </tfoot>
@@ -381,7 +398,7 @@ export default function Caja() {
           )}
 
           {/* ── Vista gráfica ── */}
-          {gastosView === 'grafica' && (
+          {gastosView === 'grafica' && gastosFiltro !== 'inversion' && (
             <div>
               {/* Cards por categoría */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10, marginBottom: 18 }}>
@@ -444,7 +461,8 @@ export default function Caja() {
             </div>
           )}
         </div>
-      )}
+        )
+      })()}
 
       {/* ── TRANSFERENCIAS ── */}
       {tab === 'transferencias' && (
@@ -543,10 +561,27 @@ export default function Caja() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setGastoModal(false)}>
           <div className="modal" style={{ maxWidth: 480 }}>
             <div className="modal-head">
-              <span className="modal-title">Nuevo gasto</span>
+              <span className="modal-title">{gastoForm.tipo_registro === 'inversion' ? 'Nueva inversión' : 'Nuevo gasto'}</span>
               <button className="modal-close" onClick={() => setGastoModal(false)}>×</button>
             </div>
             <div className="modal-body">
+              {/* Toggle Gasto / Inversión */}
+              <div style={{ display: 'flex', gap: 0, marginBottom: 18, background: 'var(--cream-d)', borderRadius: 8, padding: 3 }}>
+                {[['gasto', 'Gasto'], ['inversion', 'Inversión']].map(([v, lbl]) => (
+                  <button
+                    key={v}
+                    onClick={() => setGastoForm(f => ({ ...f, tipo_registro: v }))}
+                    style={{
+                      flex: 1, border: 'none', cursor: 'pointer', padding: '7px 0', borderRadius: 6,
+                      fontSize: 13.5, fontWeight: 600, fontFamily: 'inherit', transition: 'all .15s',
+                      background: gastoForm.tipo_registro === v ? (v === 'inversion' ? '#7c3aed' : 'var(--forest)') : 'transparent',
+                      color: gastoForm.tipo_registro === v ? '#fff' : 'var(--txt2)',
+                    }}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Fecha</label>
@@ -588,7 +623,7 @@ export default function Caja() {
             </div>
             <div className="modal-foot">
               <button className="btn btn-ghost" onClick={() => setGastoModal(false)}>Cancelar</button>
-              <button className="btn btn-amber" onClick={saveGasto} disabled={gastoSaving}>{gastoSaving ? 'Guardando…' : 'Registrar gasto'}</button>
+              <button className="btn btn-amber" onClick={saveGasto} disabled={gastoSaving} style={gastoForm.tipo_registro === 'inversion' ? { background: '#7c3aed' } : {}}>{gastoSaving ? 'Guardando…' : gastoForm.tipo_registro === 'inversion' ? 'Registrar inversión' : 'Registrar gasto'}</button>
             </div>
           </div>
         </div>
