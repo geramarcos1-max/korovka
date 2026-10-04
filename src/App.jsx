@@ -9,6 +9,7 @@ import PuntosVenta from './pages/PuntosVenta'
 import Productos from './pages/Productos'
 import Caja from './pages/Caja'
 import OdcInterna from './pages/OdcInterna'
+import Inteligencia from './pages/Inteligencia'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -30,6 +31,7 @@ function AppRoutes() {
         <Route path="productos" element={<Productos />} />
         <Route path="caja" element={<Caja />} />
         <Route path="odc-interna" element={<OdcInterna />} />
+        <Route path="inteligencia" element={<Inteligencia />} />
       </Route>
     </Routes>
   )
