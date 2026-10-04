@@ -42,7 +42,8 @@ function KpiChip({ label, value, color }) {
   )
 }
 
-function DonutChart({ slices, size = 180 }) {
+// Donut chart con tooltip por hover
+function DonutChart({ slices, size = 180, onSliceHover }) {
   const r = 68
   const cx = size / 2
   const cy = size / 2
@@ -58,7 +59,7 @@ function DonutChart({ slices, size = 180 }) {
 
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--cream-d)" strokeWidth={22} />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#EDE4CF" strokeWidth={22} />
       {segments.map((s, i) => (
         <circle
           key={i}
@@ -69,9 +70,96 @@ function DonutChart({ slices, size = 180 }) {
           strokeDasharray={`${s.dash} ${s.gap}`}
           strokeDashoffset={-s.offset}
           strokeLinecap="butt"
+          style={{ cursor: 'pointer', transition: 'stroke-width .15s' }}
+          onMouseEnter={e => { e.currentTarget.setAttribute('strokeWidth', 28); onSliceHover?.(s) }}
+          onMouseLeave={e => { e.currentTarget.setAttribute('strokeWidth', 22); onSliceHover?.(null) }}
         />
       ))}
     </svg>
+  )
+}
+
+// Gráfica de línea SVG (sin librería)
+function LineChart({ data }) {
+  const [hovered, setHovered] = useState(null)
+
+  if (!data || data.length < 2) {
+    return <div style={{ padding: '28px 0', textAlign: 'center', color: 'var(--txt3)', fontSize: 13 }}>Necesitas al menos 2 meses de datos</div>
+  }
+
+  const VW = 400
+  const VH = 200
+  const pad = { t: 28, r: 16, b: 36, l: 12 }
+  const W = VW - pad.l - pad.r
+  const H = VH - pad.t - pad.b
+
+  const maxV = Math.max(...data.map(([, d]) => d.total))
+  const xOf = i => pad.l + (i / (data.length - 1)) * W
+  const yOf = v => pad.t + H - (v / (maxV || 1)) * H
+
+  const pts = data.map(([key, d], i) => ({ x: xOf(i), y: yOf(d.total), key, total: d.total, count: d.count }))
+  const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ')
+  const areaPath = `M${pts[0].x},${pad.t + H} ${pts.map(p => `L${p.x},${p.y}`).join(' ')} L${pts[pts.length - 1].x},${pad.t + H} Z`
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <svg viewBox={`0 0 ${VW} ${VH}`} width="100%" style={{ display: 'block', overflow: 'visible' }}>
+        {/* Líneas de guía horizontales */}
+        {[0, 0.5, 1].map(f => (
+          <line key={f} x1={pad.l} x2={pad.l + W} y1={pad.t + H * (1 - f)} y2={pad.t + H * (1 - f)}
+            stroke="#E5E0D6" strokeWidth={1} strokeDasharray={f === 0 ? 'none' : '4,3'} />
+        ))}
+        {/* Área bajo la línea */}
+        <path d={areaPath} fill="#063831" fillOpacity={0.10} />
+        {/* Línea */}
+        <path d={linePath} fill="none" stroke="#063831" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+        {/* % cambio entre meses */}
+        {pts.map((p, i) => {
+          if (i === 0) return null
+          const prev = pts[i - 1]
+          const chg = prev.total > 0 ? ((p.total - prev.total) / prev.total) * 100 : null
+          if (chg === null) return null
+          const color = chg >= 0 ? '#16a34a' : '#dc2626'
+          return (
+            <text key={i} x={(p.x + prev.x) / 2} y={Math.min(p.y, prev.y) - 8}
+              textAnchor="middle" fontSize={9} fill={color} fontWeight="700">
+              {chg >= 0 ? '+' : ''}{chg.toFixed(0)}%
+            </text>
+          )
+        })}
+        {/* Puntos e importes */}
+        {pts.map((p, i) => {
+          const [, mo] = p.key.split('-')
+          const isHov = hovered?.key === p.key
+          return (
+            <g key={i}>
+              {/* Importe sobre el punto */}
+              <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize={9} fill="#063831" fontWeight="600"
+                style={{ opacity: isHov ? 1 : 0.6 }}>
+                {fmt(p.total)}
+              </text>
+              {/* Punto */}
+              <circle cx={p.x} cy={p.y} r={isHov ? 6 : 4} fill="#063831" stroke="white" strokeWidth={2}
+                onMouseEnter={() => setHovered(p)}
+                onMouseLeave={() => setHovered(null)}
+                style={{ cursor: 'pointer', transition: 'r .1s' }}
+              />
+              {/* Etiqueta mes */}
+              <text x={p.x} y={pad.t + H + 14} textAnchor="middle" fontSize={9.5} fill="#888">
+                {MONTH_NAMES[parseInt(mo) - 1]}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
+      {/* Tooltip hover */}
+      {hovered && (
+        <div style={{ position: 'absolute', top: 4, right: 4, background: 'white', border: '1px solid var(--bdr)', borderRadius: 8, padding: '8px 12px', pointerEvents: 'none', boxShadow: '0 2px 8px rgba(0,0,0,.08)' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--txt)' }}>{fmt(hovered.total)}</div>
+          <div style={{ fontSize: 11, color: 'var(--txt3)', marginTop: 2 }}>{hovered.count} ventas</div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -85,8 +173,9 @@ export default function Inteligencia() {
   const [pvEntregas, setPvEntregas] = useState([])
 
   const [periodoMeses, setPeriodoMeses] = useState(6)
+  const [hoveredPie, setHoveredPie]     = useState(null)
 
-  const hoy   = new Date().toISOString().slice(0, 10)
+  const hoy    = new Date().toISOString().slice(0, 10)
   const hace6m = new Date(Date.now() - 183 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const [desde, setDesde] = useState(hace6m)
   const [hasta, setHasta] = useState(hoy)
@@ -187,7 +276,7 @@ export default function Inteligencia() {
 
   // ── Puntos de Venta ───────────────────────────────────────
   const pvConEstado = useMemo(() => pvEntregas.map(e => {
-    const cobrado  = (e.pv_cobros || []).reduce((s, c) => s + Number(c.monto || 0), 0)
+    const cobrado   = (e.pv_cobros || []).reduce((s, c) => s + Number(c.monto || 0), 0)
     const pendiente = Math.max(0, Number(e.total || 0) - cobrado)
     return { ...e, cobrado, pendiente }
   }), [pvEntregas])
@@ -256,7 +345,7 @@ export default function Inteligencia() {
     ? (() => { const [y, mo] = mesSel.split('-'); return `${MONTH_NAMES[parseInt(mo) - 1]} ${y}` })()
     : `${desde} → ${hasta}`
 
-  const BAR_H = 160 // altura máxima de barras en px
+  const BAR_H = 160
 
   return (
     <div>
@@ -276,7 +365,7 @@ export default function Inteligencia() {
         </div>
       </div>
 
-      {/* ── KPIs ventas ── */}
+      {/* ── KPIs ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 12, marginBottom: 20 }}>
         {[
           { label: 'Total periodo', value: fmt(totalPeriodo), color: 'var(--forest)' },
@@ -287,76 +376,71 @@ export default function Inteligencia() {
         ].map(k => <KpiChip key={k.label} {...k} />)}
       </div>
 
-      {/* ── Ventas mes a mes — barras VERTICALES ── */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <SectionTitle sub={`Últimos ${periodoMeses} meses · Total ${fmt(totalPeriodo)} · Clic en un mes para filtrar el análisis`}>
-          Ventas mes a mes
-        </SectionTitle>
-        {ventasMes.length === 0 ? (
-          <div className="empty" style={{ padding: '28px 0' }}>Sin datos suficientes</div>
-        ) : (
-          <div>
-            {/* Área de barras */}
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: BAR_H + 28, paddingBottom: 0 }}>
-              {ventasMes.map(([key, data]) => {
-                const barH   = Math.max((data.total / maxMes) * BAR_H, 3)
-                const esSel  = mesSel === key
-                const esAct  = key === mesActualKey
-                const color  = esSel ? 'var(--forest)' : esAct ? '#2B6B50' : '#7CB5A0'
-                const [, mo] = key.split('-')
-                return (
-                  <div
-                    key={key}
-                    onClick={() => setMesSel(esSel ? null : key)}
-                    title={`${MONTH_NAMES[parseInt(mo)-1]} · ${fmt(data.total)} · ${data.count} ventas`}
-                    style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', cursor: 'pointer', height: '100%' }}
-                  >
-                    {/* Importe encima */}
-                    <div style={{ fontSize: 9.5, fontWeight: 600, color: esSel ? 'var(--forest)' : 'var(--txt3)', textAlign: 'center', marginBottom: 3, lineHeight: 1.2, whiteSpace: 'nowrap' }}>
-                      {fmt(data.total)}
+      {/* ── Ventas mes a mes + Crecimiento (mismo tamaño) ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+
+        {/* Barras verticales */}
+        <div className="card">
+          <SectionTitle sub={`Últimos ${periodoMeses} meses · Clic en un mes para filtrar`}>
+            Ventas mes a mes
+          </SectionTitle>
+          {ventasMes.length === 0 ? (
+            <div className="empty" style={{ padding: '28px 0' }}>Sin datos suficientes</div>
+          ) : (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: BAR_H + 28 }}>
+                {ventasMes.map(([key, data]) => {
+                  const barH  = Math.max((data.total / maxMes) * BAR_H, 3)
+                  const esSel = mesSel === key
+                  const esAct = key === mesActualKey
+                  const color = esSel ? '#063831' : esAct ? '#2B6B50' : '#7CB5A0'
+                  const [, mo] = key.split('-')
+                  return (
+                    <div key={key} onClick={() => setMesSel(esSel ? null : key)}
+                      title={`${MONTH_NAMES[parseInt(mo)-1]} · ${fmt(data.total)} · ${data.count} ventas`}
+                      style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', cursor: 'pointer', height: '100%' }}>
+                      <div style={{ fontSize: 9.5, fontWeight: 600, color: esSel ? '#063831' : 'var(--txt3)', textAlign: 'center', marginBottom: 3, lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+                        {fmt(data.total)}
+                      </div>
+                      <div style={{ width: '100%', height: barH, background: color, borderRadius: '4px 4px 0 0', transition: 'height .4s ease, background .15s', opacity: esSel ? 1 : 0.8, outline: esSel ? '2px solid #063831' : 'none', outlineOffset: 1 }} />
                     </div>
-                    {/* Barra */}
-                    <div style={{
-                      width: '100%',
-                      height: barH,
-                      background: color,
-                      borderRadius: '4px 4px 0 0',
-                      transition: 'height .4s ease, background .15s',
-                      opacity: esSel ? 1 : 0.8,
-                      outline: esSel ? `2px solid var(--forest)` : 'none',
-                      outlineOffset: 1,
-                    }} />
-                  </div>
-                )
-              })}
-            </div>
-            {/* Línea base */}
-            <div style={{ borderTop: '2px solid var(--bdr)', marginBottom: 6 }} />
-            {/* Etiquetas de mes */}
-            <div style={{ display: 'flex', gap: 6 }}>
-              {ventasMes.map(([key, data]) => {
-                const [yr, mo] = key.split('-')
-                const esSel = mesSel === key
-                const esAct = key === mesActualKey
-                return (
-                  <div key={key} onClick={() => setMesSel(esSel ? null : key)}
-                    style={{ flex: 1, textAlign: 'center', cursor: 'pointer', lineHeight: 1.3 }}>
-                    <div style={{ fontSize: 10.5, fontWeight: esSel || esAct ? 700 : 400, color: esSel || esAct ? 'var(--forest)' : 'var(--txt3)' }}>
-                      {MONTH_NAMES[parseInt(mo) - 1]}
+                  )
+                })}
+              </div>
+              <div style={{ borderTop: '2px solid var(--bdr)', marginBottom: 6 }} />
+              <div style={{ display: 'flex', gap: 6 }}>
+                {ventasMes.map(([key, data]) => {
+                  const [yr, mo] = key.split('-')
+                  const esSel = mesSel === key
+                  const esAct = key === mesActualKey
+                  return (
+                    <div key={key} onClick={() => setMesSel(esSel ? null : key)}
+                      style={{ flex: 1, textAlign: 'center', cursor: 'pointer', lineHeight: 1.3 }}>
+                      <div style={{ fontSize: 10.5, fontWeight: esSel || esAct ? 700 : 400, color: esSel || esAct ? '#063831' : 'var(--txt3)' }}>
+                        {MONTH_NAMES[parseInt(mo) - 1]}
+                      </div>
+                      <div style={{ fontSize: 9, color: 'var(--txt3)' }}>{yr.slice(2)}</div>
+                      <div style={{ fontSize: 9, color: 'var(--txt3)' }}>{data.count}v</div>
                     </div>
-                    <div style={{ fontSize: 9, color: 'var(--txt3)' }}>{yr.slice(2)}</div>
-                    <div style={{ fontSize: 9, color: 'var(--txt3)' }}>{data.count}v</div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
+              <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, paddingTop: 8, borderTop: '1px dashed var(--bdr)' }}>
+                <span style={{ fontSize: 11, color: 'var(--txt3)' }}>Promedio mensual:</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--amber-t)' }}>{fmt(promedioMes)}</span>
+              </div>
             </div>
-            {/* Promedio */}
-            <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, paddingTop: 8, borderTop: '1px dashed var(--bdr)' }}>
-              <span style={{ fontSize: 11, color: 'var(--txt3)' }}>Promedio mensual:</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--amber-t)' }}>{fmt(promedioMes)}</span>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* Gráfica de línea — crecimiento */}
+        <div className="card">
+          <SectionTitle sub="Tendencia de ingresos · % cambio entre meses">
+            Crecimiento mes a mes
+          </SectionTitle>
+          <LineChart data={ventasMes} />
+        </div>
+
       </div>
 
       {/* ── Filtro de análisis ── */}
@@ -378,8 +462,8 @@ export default function Inteligencia() {
         )}
       </div>
 
-      {/* ── Top productos + Donut ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: prodMap.length > 0 ? '1fr 280px' : '1fr', gap: 16, marginBottom: 20 }}>
+      {/* ── Top productos + Donut (misma altura) ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start', marginBottom: 20 }}>
 
         <div className="card">
           <SectionTitle sub={`Por ingresos · ${labelFiltro}`}>Top productos</SectionTitle>
@@ -406,29 +490,48 @@ export default function Inteligencia() {
           )}
         </div>
 
-        {prodMap.length > 0 && (
-          <div className="card">
-            <SectionTitle sub="Composición por ingresos">Desglose</SectionTitle>
+        <div className="card">
+          <SectionTitle sub="Composición por ingresos · Pasa el cursor sobre la gráfica">Desglose</SectionTitle>
+          {prodMap.length === 0 ? (
+            <div className="empty" style={{ padding: '28px 0' }}>Sin datos en el periodo seleccionado</div>
+          ) : (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
               <div style={{ position: 'relative', display: 'inline-block' }}>
-                <DonutChart slices={pieSlices} size={180} />
+                <DonutChart slices={pieSlices} size={200} onSliceHover={setHoveredPie} />
+                {/* Centro — muestra hover o total */}
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                  <div style={{ fontSize: 11, color: 'var(--txt3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em' }}>Total</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>{fmt(totalFiltro)}</div>
+                  {hoveredPie ? (
+                    <>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: hoveredPie.color, textTransform: 'uppercase', letterSpacing: '.05em', textAlign: 'center', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
+                        {hoveredPie.nombre}
+                      </div>
+                      <div style={{ fontSize: 24, fontWeight: 800, color: hoveredPie.color, lineHeight: 1.1 }}>
+                        {fmtN(hoveredPie.pct)}%
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--txt3)', fontWeight: 500 }}>
+                        {fmt(hoveredPie.ingresos)}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 11, color: 'var(--txt3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em' }}>Total</div>
+                      <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)' }}>{fmt(totalFiltro)}</div>
+                    </>
+                  )}
                 </div>
               </div>
-              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {pieSlices.map(s => (
-                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 6px', borderRadius: 6, background: hoveredPie?.id === s.id ? 'var(--forest-s)' : 'transparent', transition: 'background .1s' }}>
                     <div style={{ width: 8, height: 8, borderRadius: 2, background: s.color, flexShrink: 0 }} />
-                    <div style={{ fontSize: 11.5, color: 'var(--txt2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.nombre}</div>
-                    <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--txt3)', flexShrink: 0 }}>{fmtN(s.pct)}%</div>
+                    <div style={{ fontSize: 12, color: 'var(--txt2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.nombre}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--txt3)', flexShrink: 0 }}>{fmtN(s.pct)}%</div>
                   </div>
                 ))}
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* ── Puntos de Venta ── */}
@@ -436,16 +539,12 @@ export default function Inteligencia() {
         <SectionTitle sub="Consignaciones y cuentas por cobrar de puntos de venta">
           Puntos de Venta
         </SectionTitle>
-
-        {/* KPIs PV */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
           <KpiChip label="Total entregado" value={fmt(pvTotalEntregado)} color="var(--forest)" />
           <KpiChip label="Total cobrado" value={fmt(pvTotalCobrado)} color="var(--ok)" />
           <KpiChip label="Saldo por cobrar" value={fmt(pvSaldoPendiente)} color={pvSaldoPendiente > 0 ? 'var(--amber-t)' : 'var(--ok)'} />
           <KpiChip label="Clientes PV" value={pvPorCliente.length} color="var(--forest)" />
         </div>
-
-        {/* Tabla CxC por cliente */}
         {pvPorCliente.length === 0 ? (
           <div className="empty" style={{ padding: '20px 0' }}>Sin puntos de venta registrados</div>
         ) : (
