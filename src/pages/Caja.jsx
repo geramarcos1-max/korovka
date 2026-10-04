@@ -1,6 +1,53 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+
+function SliderConfirm({ onConfirm, onCancel, label = 'Desliza para confirmar' }) {
+  const trackRef = useRef(null)
+  const [pos, setPos] = useState(0)
+  const dragging = useRef(false)
+  const startX = useRef(0)
+
+  function getTrackWidth() { return (trackRef.current?.clientWidth || 260) - 48 }
+
+  function start(clientX) { dragging.current = true; startX.current = clientX - pos }
+  function move(clientX) {
+    if (!dragging.current) return
+    const next = Math.max(0, Math.min(clientX - startX.current, getTrackWidth()))
+    setPos(next)
+  }
+  function end() {
+    if (!dragging.current) return
+    dragging.current = false
+    if (pos >= getTrackWidth() * 0.88) { onConfirm() } else { setPos(0) }
+  }
+
+  const pct = pos / Math.max(getTrackWidth(), 1)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: '8px 0' }}>
+      <div style={{ fontSize: 13.5, color: 'var(--txt2)', textAlign: 'center' }}>{label}</div>
+      <div
+        ref={trackRef}
+        onMouseMove={e => move(e.clientX)}
+        onMouseUp={end} onMouseLeave={end}
+        style={{ position: 'relative', width: '100%', height: 48, background: `linear-gradient(90deg, rgba(220,38,38,.18) ${pct * 100}%, var(--cream-d) ${pct * 100}%)`, borderRadius: 100, cursor: 'default', userSelect: 'none', overflow: 'hidden', transition: 'background .1s' }}
+      >
+        <div
+          onMouseDown={e => start(e.clientX)}
+          onTouchStart={e => start(e.touches[0].clientX)}
+          onTouchMove={e => { e.preventDefault(); move(e.touches[0].clientX) }}
+          onTouchEnd={end}
+          style={{ position: 'absolute', left: pos, top: 4, width: 40, height: 40, borderRadius: '50%', background: 'var(--red)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', boxShadow: '0 2px 8px rgba(0,0,0,.18)', transition: dragging.current ? 'none' : 'left .25s', color: '#fff', fontSize: 18, fontWeight: 700 }}
+        >›</div>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--txt3)', pointerEvents: 'none', opacity: 1 - pct * 2 }}>
+          desliza →
+        </div>
+      </div>
+      <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancelar</button>
+    </div>
+  )
+}
 
 const MOTIVOS = [
   { value: 'operacion',      label: 'Operación' },
@@ -107,6 +154,19 @@ export default function Caja() {
   const [histTipo, setHistTipo]         = useState('')
   const [gastosView, setGastosView]     = useState('tabla')
   const [gastosFiltro, setGastosFiltro] = useState('todos')
+
+  const [deleteModal, setDeleteModal]   = useState(null) // { type, id, label, refId? }
+  const [deleteErr, setDeleteErr]       = useState('')
+
+  const [editGastoModal, setEditGastoModal]   = useState(false)
+  const [editGastoForm, setEditGastoForm]     = useState({})
+  const [editGastoErr, setEditGastoErr]       = useState('')
+  const [editGastoSaving, setEditGastoSaving] = useState(false)
+
+  const [editTransModal, setEditTransModal]   = useState(false)
+  const [editTransForm, setEditTransForm]     = useState({})
+  const [editTransErr, setEditTransErr]       = useState('')
+  const [editTransSaving, setEditTransSaving] = useState(false)
 
   async function load() {
     const [{ data: p }, { data: m }] = await Promise.all([
@@ -218,6 +278,80 @@ export default function Caja() {
     const { error } = await supabase.from('personas_caja').insert({ nombre: personaNombre.trim() })
     if (error) { setPersonaSaving(false); setPersonaErr(error.message); return }
     setPersonaSaving(false); setPersonaModal(false); setPersonaNombre(''); load()
+  }
+
+  function openEditGasto(g) {
+    setEditGastoForm({
+      id: g.id,
+      monto: Math.abs(Number(g.monto)),
+      concepto: g.concepto || '',
+      persona_id: g.persona_id || '',
+      tipo_registro: g.referencia_tipo === 'inversion' ? 'inversion' : 'gasto',
+    })
+    setEditGastoErr('')
+    setEditGastoModal(true)
+  }
+
+  async function updateGasto() {
+    if (!editGastoForm.persona_id) { setEditGastoErr('Selecciona quién pagó.'); return }
+    if (!editGastoForm.monto || isNaN(Number(editGastoForm.monto)) || Number(editGastoForm.monto) <= 0) { setEditGastoErr('Ingresa un monto válido.'); return }
+    setEditGastoSaving(true)
+    const { error } = await supabase.from('caja_movimientos').update({
+      persona_id: editGastoForm.persona_id,
+      monto: -Math.abs(Number(editGastoForm.monto)),
+      concepto: editGastoForm.concepto,
+      referencia_tipo: editGastoForm.tipo_registro,
+    }).eq('id', editGastoForm.id)
+    if (error) { setEditGastoSaving(false); setEditGastoErr(error.message); return }
+    setEditGastoSaving(false); setEditGastoModal(false); load()
+  }
+
+  function openEditTrans(t) {
+    setEditTransForm({
+      refId: t.salida?.referencia_id || '',
+      salidaId: t.salida?.id || '',
+      entradaId: t.entrada?.id || '',
+      de_persona_id: t.salida?.persona_id || '',
+      a_persona_id: t.entrada?.persona_id || '',
+      monto: Math.abs(Number(t.salida?.monto || 0)),
+      concepto: t.salida?.concepto || '',
+    })
+    setEditTransErr('')
+    setEditTransModal(true)
+  }
+
+  async function updateTransferencia() {
+    if (!editTransForm.de_persona_id || !editTransForm.a_persona_id) { setEditTransErr('Selecciona ambas personas.'); return }
+    if (editTransForm.de_persona_id === editTransForm.a_persona_id) { setEditTransErr('Las personas deben ser distintas.'); return }
+    if (!editTransForm.monto || isNaN(Number(editTransForm.monto)) || Number(editTransForm.monto) <= 0) { setEditTransErr('Ingresa un monto válido.'); return }
+    setEditTransSaving(true)
+    const monto = Math.abs(Number(editTransForm.monto))
+    const concepto = editTransForm.concepto || 'Transferencia entre personas'
+    const [r1, r2] = await Promise.all([
+      supabase.from('caja_movimientos').update({ persona_id: editTransForm.de_persona_id, monto: -monto, concepto }).eq('id', editTransForm.salidaId),
+      supabase.from('caja_movimientos').update({ persona_id: editTransForm.a_persona_id,  monto,        concepto }).eq('id', editTransForm.entradaId),
+    ])
+    const err = r1.error || r2.error
+    if (err) { setEditTransSaving(false); setEditTransErr(err.message); return }
+    setEditTransSaving(false); setEditTransModal(false); load()
+  }
+
+  async function deleteItem() {
+    if (!deleteModal) return
+    setDeleteErr('')
+    try {
+      if (deleteModal.type === 'gasto') {
+        const { error } = await supabase.from('caja_movimientos').delete().eq('id', deleteModal.id)
+        if (error) throw error
+      } else if (deleteModal.type === 'transferencia') {
+        const { error } = await supabase.from('caja_movimientos').delete().eq('referencia_id', deleteModal.refId)
+        if (error) throw error
+      }
+      setDeleteModal(null)
+      load()
+    } catch (err) {
+      setDeleteErr(err.message || 'Error al eliminar')
+    }
   }
 
   if (loading) return <div className="empty">Cargando…</div>
@@ -355,10 +489,11 @@ export default function Caja() {
                       <th>Pagado por</th>
                       <th>Concepto</th>
                       <th className="txt-right">Monto</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {gastosVis.length === 0 && <tr><td colSpan={5} className="empty">Sin registros</td></tr>}
+                    {gastosVis.length === 0 && <tr><td colSpan={6} className="empty">Sin registros</td></tr>}
                     {gastosVis.map(g => {
                       const esInversion = g.referencia_tipo === 'inversion'
                       return (
@@ -378,6 +513,12 @@ export default function Caja() {
                           <td style={{ fontWeight: 500 }}>{g.personas_caja?.nombre || '—'}</td>
                           <td style={{ color: 'var(--txt2)', fontSize: 13 }}>{g.concepto}</td>
                           <td className="txt-right mono" style={{ fontWeight: 600, color: esInversion ? '#7c3aed' : 'var(--red)' }}>{fmt(Math.abs(g.monto))}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            <div className="gap-4">
+                              <button className="btn btn-ghost btn-sm" onClick={() => openEditGasto(g)}>Editar</button>
+                              <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => { setDeleteErr(''); setDeleteModal({ type: 'gasto', id: g.id, label: g.concepto || 'este gasto' }) }}>Eliminar</button>
+                            </div>
+                          </td>
                         </tr>
                       )
                     })}
@@ -389,6 +530,7 @@ export default function Caja() {
                         <td className="txt-right mono" style={{ fontWeight: 700, color: 'var(--txt)', paddingTop: 10 }}>
                           {fmt(Math.abs(gastosVis.reduce((a, g) => a + Number(g.monto), 0)))}
                         </td>
+                        <td />
                       </tr>
                     </tfoot>
                   )}
@@ -477,10 +619,11 @@ export default function Caja() {
                     <th>A</th>
                     <th>Concepto</th>
                     <th className="txt-right">Monto</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {transferencias.length === 0 && <tr><td colSpan={5} className="empty">Sin transferencias registradas</td></tr>}
+                  {transferencias.length === 0 && <tr><td colSpan={6} className="empty">Sin transferencias registradas</td></tr>}
                   {transferencias.map((t, i) => (
                     <tr key={i}>
                       <td style={{ whiteSpace: 'nowrap', fontSize: 12, color: 'var(--txt3)' }}>
@@ -490,6 +633,12 @@ export default function Caja() {
                       <td style={{ fontWeight: 500, color: 'var(--ok-t)' }}>{t.entrada?.personas_caja?.nombre || '—'}</td>
                       <td style={{ color: 'var(--txt2)', fontSize: 13 }}>{t.salida?.concepto || '—'}</td>
                       <td className="txt-right mono" style={{ fontWeight: 600 }}>{fmt(Math.abs(t.salida?.monto || 0))}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <div className="gap-4">
+                          <button className="btn btn-ghost btn-sm" onClick={() => openEditTrans(t)}>Editar</button>
+                          <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => { setDeleteErr(''); setDeleteModal({ type: 'transferencia', refId: t.salida?.referencia_id, label: `transferencia de ${t.salida?.personas_caja?.nombre || '?'} a ${t.entrada?.personas_caja?.nombre || '?'}` }) }}>Eliminar</button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -667,6 +816,110 @@ export default function Caja() {
             <div className="modal-foot">
               <button className="btn btn-ghost" onClick={() => setTransModal(false)}>Cancelar</button>
               <button className="btn btn-amber" onClick={saveTransferencia} disabled={transSaving}>{transSaving ? 'Guardando…' : 'Registrar transferencia'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Editar gasto ── */}
+      {editGastoModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditGastoModal(false)}>
+          <div className="modal" style={{ maxWidth: 480 }}>
+            <div className="modal-head">
+              <span className="modal-title">Editar {editGastoForm.tipo_registro === 'inversion' ? 'inversión' : 'gasto'}</span>
+              <button className="modal-close" onClick={() => setEditGastoModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ display: 'flex', gap: 0, marginBottom: 18, background: 'var(--cream-d)', borderRadius: 8, padding: 3 }}>
+                {[['gasto', 'Gasto'], ['inversion', 'Inversión']].map(([v, lbl]) => (
+                  <button key={v} onClick={() => setEditGastoForm(f => ({ ...f, tipo_registro: v }))}
+                    style={{ flex: 1, border: 'none', cursor: 'pointer', padding: '7px 0', borderRadius: 6, fontSize: 13.5, fontWeight: 600, fontFamily: 'inherit', transition: 'all .15s', background: editGastoForm.tipo_registro === v ? (v === 'inversion' ? '#7c3aed' : 'var(--forest)') : 'transparent', color: editGastoForm.tipo_registro === v ? '#fff' : 'var(--txt2)' }}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+              <div className="form-group">
+                <label className="form-label">Monto *</label>
+                <input type="number" className="form-input" value={editGastoForm.monto} onChange={e => setEditGastoForm(f => ({ ...f, monto: e.target.value }))} placeholder="0.00" min="0" step="0.01" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Pagado por *</label>
+                <select className="form-select" value={editGastoForm.persona_id} onChange={e => setEditGastoForm(f => ({ ...f, persona_id: e.target.value }))}>
+                  <option value="">Seleccionar…</option>
+                  {personas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Concepto</label>
+                <input className="form-input" value={editGastoForm.concepto} onChange={e => setEditGastoForm(f => ({ ...f, concepto: e.target.value }))} placeholder="Ej: Operación — Etiquetas" />
+              </div>
+              {editGastoErr && <div style={{ color: 'var(--red)', fontSize: 13 }}>{editGastoErr}</div>}
+            </div>
+            <div className="modal-foot">
+              <button className="btn btn-ghost" onClick={() => setEditGastoModal(false)}>Cancelar</button>
+              <button className="btn btn-amber" onClick={updateGasto} disabled={editGastoSaving} style={editGastoForm.tipo_registro === 'inversion' ? { background: '#7c3aed' } : {}}>{editGastoSaving ? 'Guardando…' : 'Guardar cambios'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Editar transferencia ── */}
+      {editTransModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditTransModal(false)}>
+          <div className="modal" style={{ maxWidth: 440 }}>
+            <div className="modal-head">
+              <span className="modal-title">Editar transferencia</span>
+              <button className="modal-close" onClick={() => setEditTransModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">De (entrega dinero)</label>
+                  <select className="form-select" value={editTransForm.de_persona_id} onChange={e => setEditTransForm(f => ({ ...f, de_persona_id: e.target.value }))}>
+                    <option value="">Seleccionar…</option>
+                    {personas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">A (recibe dinero)</label>
+                  <select className="form-select" value={editTransForm.a_persona_id} onChange={e => setEditTransForm(f => ({ ...f, a_persona_id: e.target.value }))}>
+                    <option value="">Seleccionar…</option>
+                    {personas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Monto *</label>
+                <input type="number" className="form-input" value={editTransForm.monto} onChange={e => setEditTransForm(f => ({ ...f, monto: e.target.value }))} placeholder="0.00" min="0" step="0.01" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Concepto</label>
+                <input className="form-input" value={editTransForm.concepto} onChange={e => setEditTransForm(f => ({ ...f, concepto: e.target.value }))} placeholder="Ej: Entrega efectivo del día" />
+              </div>
+              {editTransErr && <div style={{ color: 'var(--red)', fontSize: 13 }}>{editTransErr}</div>}
+            </div>
+            <div className="modal-foot">
+              <button className="btn btn-ghost" onClick={() => setEditTransModal(false)}>Cancelar</button>
+              <button className="btn btn-amber" onClick={updateTransferencia} disabled={editTransSaving}>{editTransSaving ? 'Guardando…' : 'Guardar cambios'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Confirmar eliminación con slider ── */}
+      {deleteModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDeleteModal(null)}>
+          <div className="modal" style={{ maxWidth: 400 }}>
+            <div className="modal-head">
+              <span className="modal-title" style={{ color: 'var(--red)' }}>Eliminar registro</span>
+              <button className="modal-close" onClick={() => setDeleteModal(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ fontSize: 13.5, color: 'var(--txt2)', marginBottom: 18, textAlign: 'center' }}>
+                Vas a eliminar: <strong style={{ color: 'var(--txt)' }}>{deleteModal.label}</strong>.<br />Esta acción no se puede deshacer.
+              </div>
+              {deleteErr && <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{deleteErr}</div>}
+              <SliderConfirm onConfirm={deleteItem} onCancel={() => setDeleteModal(null)} label="Desliza para eliminar" />
             </div>
           </div>
         </div>
