@@ -80,9 +80,20 @@ function fmt(n) {
 }
 
 function parseMonto(s) { return parseFloat(String(s || '').replace(/,/g, '')) || 0 }
-function formatMontoInput(s) {
-  const n = parseMonto(s)
-  return n > 0 ? n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : s
+function formatMontoInput(raw) {
+  // Format in real-time: strip non-numeric except dot, then add thousand commas
+  const clean = String(raw).replace(/[^0-9.]/g, '')
+  if (!clean) return ''
+  const dot = clean.indexOf('.')
+  if (dot === -1) {
+    const n = parseInt(clean, 10)
+    return isNaN(n) ? '' : n.toLocaleString('es-MX')
+  }
+  const intStr = clean.slice(0, dot)
+  const decStr = clean.slice(dot + 1, dot + 3)
+  const n = parseInt(intStr, 10)
+  const intFmt = isNaN(n) ? '0' : n.toLocaleString('es-MX')
+  return `${intFmt}.${decStr}`
 }
 
 function fmtSigned(n) {
@@ -834,7 +845,7 @@ export default function Caja() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Monto *</label>
-                  <input type="text" inputMode="decimal" className="form-input" value={gastoForm.monto} onChange={e => setGastoForm(f => ({ ...f, monto: e.target.value.replace(/[^0-9.]/g, '') }))} onBlur={() => setGastoForm(f => ({ ...f, monto: formatMontoInput(f.monto) }))} onFocus={() => setGastoForm(f => ({ ...f, monto: String(f.monto).replace(/,/g, '') }))} placeholder="0.00" />
+                  <input type="text" inputMode="decimal" className="form-input" value={gastoForm.monto} onChange={e => setGastoForm(f => ({ ...f, monto: formatMontoInput(e.target.value) }))} placeholder="0.00" />
                 </div>
               </div>
               <div className="form-group">
@@ -901,7 +912,7 @@ export default function Caja() {
               </div>
               <div className="form-group">
                 <label className="form-label">Monto *</label>
-                <input type="text" inputMode="decimal" className="form-input" value={transForm.monto} onChange={e => setTransForm(f => ({ ...f, monto: e.target.value.replace(/[^0-9.]/g, '') }))} onBlur={() => setTransForm(f => ({ ...f, monto: formatMontoInput(f.monto) }))} onFocus={() => setTransForm(f => ({ ...f, monto: String(f.monto).replace(/,/g, '') }))} placeholder="0.00" />
+                <input type="text" inputMode="decimal" className="form-input" value={transForm.monto} onChange={e => setTransForm(f => ({ ...f, monto: formatMontoInput(e.target.value) }))} placeholder="0.00" />
               </div>
               <div className="form-group">
                 <label className="form-label">Propósito *</label>
@@ -950,7 +961,7 @@ export default function Caja() {
               </div>
               <div className="form-group">
                 <label className="form-label">Monto *</label>
-                <input type="text" inputMode="decimal" className="form-input" value={editGastoForm.monto} onChange={e => setEditGastoForm(f => ({ ...f, monto: e.target.value.replace(/[^0-9.]/g, '') }))} onBlur={() => setEditGastoForm(f => ({ ...f, monto: formatMontoInput(f.monto) }))} onFocus={() => setEditGastoForm(f => ({ ...f, monto: String(f.monto).replace(/,/g, '') }))} placeholder="0.00" />
+                <input type="text" inputMode="decimal" className="form-input" value={editGastoForm.monto} onChange={e => setEditGastoForm(f => ({ ...f, monto: formatMontoInput(e.target.value) }))} placeholder="0.00" />
               </div>
               <div className="form-group">
                 <label className="form-label">Pagado por *</label>
@@ -1000,7 +1011,7 @@ export default function Caja() {
               </div>
               <div className="form-group">
                 <label className="form-label">Monto *</label>
-                <input type="text" inputMode="decimal" className="form-input" value={editTransForm.monto} onChange={e => setEditTransForm(f => ({ ...f, monto: e.target.value.replace(/[^0-9.]/g, '') }))} onBlur={() => setEditTransForm(f => ({ ...f, monto: formatMontoInput(f.monto) }))} onFocus={() => setEditTransForm(f => ({ ...f, monto: String(f.monto).replace(/,/g, '') }))} placeholder="0.00" />
+                <input type="text" inputMode="decimal" className="form-input" value={editTransForm.monto} onChange={e => setEditTransForm(f => ({ ...f, monto: formatMontoInput(e.target.value) }))} placeholder="0.00" />
               </div>
               <div className="form-group">
                 <label className="form-label">Propósito *</label>
