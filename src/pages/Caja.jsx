@@ -447,23 +447,26 @@ export default function Caja() {
       {/* ── RESUMEN ── */}
       {tab === 'resumen' && (
         <div>
-          {/* Filtro de período */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, color: 'var(--txt3)', fontWeight: 500 }}>Período:</span>
+          {/* Barra de filtro de período — aplica a todas las secciones */}
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--bdr)', borderRadius: 'var(--r2)', padding: '10px 16px', marginBottom: 16, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, color: 'var(--txt2)', fontWeight: 600 }}>Filtrar por período</span>
+            <span style={{ fontSize: 13, color: 'var(--txt3)' }}>·</span>
             <input type="date" className="form-input" style={{ width: 'auto', fontSize: 13, padding: '5px 10px' }}
               value={filtroDesde} onChange={e => setFiltroDesde(e.target.value)} />
             <span style={{ fontSize: 13, color: 'var(--txt3)' }}>→</span>
             <input type="date" className="form-input" style={{ width: 'auto', fontSize: 13, padding: '5px 10px' }}
               value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)} />
-            {(filtroDesde || filtroHasta) && (
-              <button className="btn btn-ghost btn-sm" onClick={() => { setFiltroDesde(''); setFiltroHasta('') }}>
-                Limpiar filtro
-              </button>
-            )}
-            {(filtroDesde || filtroHasta) && (
-              <span style={{ fontSize: 12, color: 'var(--amber-t)', fontWeight: 500 }}>
-                Mostrando período filtrado
-              </span>
+            {(filtroDesde || filtroHasta) ? (
+              <>
+                <button className="btn btn-ghost btn-sm" onClick={() => { setFiltroDesde(''); setFiltroHasta('') }}>
+                  × Limpiar
+                </button>
+                <span style={{ fontSize: 11, background: 'var(--amber-s)', color: 'var(--amber-t)', fontWeight: 600, padding: '2px 8px', borderRadius: 100 }}>
+                  Aplica a todas las secciones
+                </span>
+              </>
+            ) : (
+              <span style={{ fontSize: 12, color: 'var(--txt3)' }}>Sin filtro — mostrando todos los movimientos</span>
             )}
           </div>
 
@@ -501,7 +504,10 @@ export default function Caja() {
               return (
                 <>
                   <div className="card" style={{ borderTop: '3px solid var(--ok)' }}>
-                    <div className="card-title" style={{ marginBottom: 12 }}>Cobros en efectivo</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                      <div className="card-title" style={{ margin: 0 }}>Cobros en efectivo</div>
+                      {(filtroDesde || filtroHasta) && <span style={{ fontSize: 11, background: 'var(--amber-s)', color: 'var(--amber-t)', fontWeight: 600, padding: '2px 8px', borderRadius: 100 }}>{filtroDesde || '…'} → {filtroHasta || '…'}</span>}
+                    </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: 8 }}>
                       {personas.map(p => (
                         <div key={p.id} style={{ background: 'var(--ok-s)', borderRadius: 8, padding: '10px 14px' }}>
@@ -516,7 +522,10 @@ export default function Caja() {
                     }
                   </div>
                   <div className="card" style={{ borderTop: '3px solid #7c3aed' }}>
-                    <div className="card-title" style={{ marginBottom: 12 }}>Reparto de ganancias</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                      <div className="card-title" style={{ margin: 0 }}>Reparto de ganancias</div>
+                      {(filtroDesde || filtroHasta) && <span style={{ fontSize: 11, background: 'var(--amber-s)', color: 'var(--amber-t)', fontWeight: 600, padding: '2px 8px', borderRadius: 100 }}>{filtroDesde || '…'} → {filtroHasta || '…'}</span>}
+                    </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: totalRepartido > 0 ? 10 : 0 }}>
                       {personas.map(p => (
                         <div key={p.id} style={{ background: '#f3e8ff', borderRadius: 8, padding: '10px 14px' }}>
@@ -542,7 +551,10 @@ export default function Caja() {
             )}
           </div>
 
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt2)', marginBottom: 10 }}>Últimos movimientos</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt2)' }}>Últimos movimientos</div>
+            {(filtroDesde || filtroHasta) && <span style={{ fontSize: 11, background: 'var(--amber-s)', color: 'var(--amber-t)', fontWeight: 600, padding: '2px 8px', borderRadius: 100 }}>{filtroDesde || '…'} → {filtroHasta || '…'}</span>}
+          </div>
           <div className="card">
             <div className="table-wrap">
               <table>
