@@ -1,8 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
-// Monochrome SVG icons
 const Icon = ({ name, size = 16 }) => {
   const icons = {
     dashboard: <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />,
@@ -16,6 +15,7 @@ const Icon = ({ name, size = 16 }) => {
     collapse:  <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />,
     expand:    <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />,
     logout:    <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />,
+    menu:      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />,
   }
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} style={{ flexShrink: 0, display: 'block' }}>
@@ -53,6 +53,23 @@ export default function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  useEffect(() => {
+    const check = () => {
+      const mobile = window.innerWidth < 768
+      setIsMobile(mobile)
+      if (!mobile) setMobileOpen(false)
+    }
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  // Close drawer when route changes
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [location.pathname])
 
   async function handleSignOut() {
     await signOut()
@@ -61,40 +78,69 @@ export default function Layout() {
 
   const displayName = profile?.nombre || user?.user_metadata?.nombre || user?.email?.split('@')[0] || 'Usuario'
   const pageTitle = titles[location.pathname] || 'Dashboard'
-  const sw = collapsed ? 64 : 240
+  const sw = isMobile ? 240 : (collapsed ? 64 : 240)
+
+  const sidebarStyle = {
+    width: sw,
+    background: 'var(--forest)',
+    display: 'flex',
+    flexDirection: 'column',
+    flexShrink: 0,
+    position: 'fixed',
+    top: 0, left: 0, bottom: 0,
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    zIndex: 200,
+    transition: 'width .2s cubic-bezier(.4,0,.2,1), transform .25s cubic-bezier(.4,0,.2,1)',
+    transform: isMobile ? (mobileOpen ? 'translateX(0)' : 'translateX(-100%)') : 'translateX(0)',
+  }
+
+  const mainMargin = isMobile ? 0 : sw
 
   return (
     <div className="app-shell">
-      <nav style={{
-        width: sw, background: 'var(--forest)', display: 'flex', flexDirection: 'column',
-        flexShrink: 0, position: 'fixed', top: 0, left: 0, bottom: 0,
-        overflowY: 'auto', overflowX: 'hidden', zIndex: 100,
-        transition: 'width .2s cubic-bezier(.4,0,.2,1)',
-      }}>
+
+      {/* Mobile overlay */}
+      {isMobile && mobileOpen && (
+        <div
+          onClick={() => setMobileOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 199, backdropFilter: 'blur(2px)' }}
+        />
+      )}
+
+      <nav style={sidebarStyle}>
         {/* Brand */}
-        <div style={{ padding: collapsed ? '18px 0' : '22px 18px 16px', borderBottom: '1px solid rgba(255,255,255,.10)', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between', gap: 8, transition: 'padding .2s' }}>
-          {!collapsed && (
-            <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
-              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 600, color: '#F6EFDF', letterSpacing: '-.01em', lineHeight: 1 }}>Korovka</div>
-              <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(246,239,223,.45)', marginTop: 4 }}>Productos Lácteos</div>
-            </div>
+        <div style={{
+          padding: (!isMobile && collapsed) ? '18px 0' : '22px 18px 16px',
+          borderBottom: '1px solid rgba(255,255,255,.10)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: (!isMobile && collapsed) ? 'center' : 'space-between',
+          gap: 8,
+          transition: 'padding .2s',
+        }}>
+          <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
+            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 600, color: '#F6EFDF', letterSpacing: '-.01em', lineHeight: 1 }}>Korovka</div>
+            <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(246,239,223,.45)', marginTop: 4 }}>Productos Lácteos</div>
+          </div>
+          {!isMobile && (
+            <button
+              onClick={() => setCollapsed(c => !c)}
+              title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(246,239,223,.5)', padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'color .12s, background .12s', flexShrink: 0 }}
+              onMouseEnter={e => { e.currentTarget.style.color = '#F6EFDF'; e.currentTarget.style.background = 'rgba(246,239,223,.10)' }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'rgba(246,239,223,.5)'; e.currentTarget.style.background = 'none' }}
+            >
+              <Icon name={collapsed ? 'expand' : 'collapse'} size={15} />
+            </button>
           )}
-          <button
-            onClick={() => setCollapsed(c => !c)}
-            title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(246,239,223,.5)', padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'color .12s, background .12s', flexShrink: 0 }}
-            onMouseEnter={e => { e.currentTarget.style.color = '#F6EFDF'; e.currentTarget.style.background = 'rgba(246,239,223,.10)' }}
-            onMouseLeave={e => { e.currentTarget.style.color = 'rgba(246,239,223,.5)'; e.currentTarget.style.background = 'none' }}
-          >
-            <Icon name={collapsed ? 'expand' : 'collapse'} size={15} />
-          </button>
         </div>
 
         {/* Nav */}
         <div style={{ padding: '8px 0', flex: 1 }}>
           {nav.map((item, i) => {
             if (item.type === 'label') {
-              if (collapsed) return null
+              if (!isMobile && collapsed) return null
               return <div key={i} style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '.10em', textTransform: 'uppercase', color: 'rgba(246,239,223,.35)', padding: '16px 18px 4px' }}>{item.label}</div>
             }
             return (
@@ -102,19 +148,19 @@ export default function Layout() {
                 key={item.to}
                 to={item.to}
                 end={item.end}
-                title={collapsed ? item.label : undefined}
+                title={(!isMobile && collapsed) ? item.label : undefined}
                 className={({ isActive }) => 'sb-item' + (isActive ? ' active' : '')}
-                style={collapsed ? { justifyContent: 'center', padding: '8px 0', margin: '1px 8px' } : {}}
+                style={(!isMobile && collapsed) ? { justifyContent: 'center', padding: '8px 0', margin: '1px 8px' } : {}}
               >
                 <Icon name={item.icon} size={17} />
-                {!collapsed && item.label}
+                {(isMobile || !collapsed) && item.label}
               </NavLink>
             )
           })}
         </div>
 
         {/* User footer */}
-        {!collapsed ? (
+        {(isMobile || !collapsed) ? (
           <div style={{ padding: '14px 20px 20px', borderTop: '1px solid rgba(255,255,255,.10)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(246,239,223,.20)', color: '#F6EFDF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
@@ -152,14 +198,26 @@ export default function Layout() {
         )}
       </nav>
 
-      <div style={{ marginLeft: sw, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg)', transition: 'margin-left .2s cubic-bezier(.4,0,.2,1)' }}>
+      <div style={{ marginLeft: mainMargin, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg)', transition: 'margin-left .2s cubic-bezier(.4,0,.2,1)' }}>
         <div className="topbar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 15, fontWeight: 600, color: 'var(--forest)', letterSpacing: '-.01em' }}>Korovka</span>
-            <span style={{ color: 'var(--bdr2)', fontSize: 16 }}>›</span>
-            <span className="topbar-title">{pageTitle}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {isMobile && (
+              <button
+                onClick={() => setMobileOpen(o => !o)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--forest)', padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center', marginRight: 2 }}
+              >
+                <Icon name="menu" size={20} />
+              </button>
+            )}
+            {!isMobile && (
+              <>
+                <span style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 15, fontWeight: 600, color: 'var(--forest)', letterSpacing: '-.01em' }}>Korovka</span>
+                <span style={{ color: 'var(--bdr2)', fontSize: 16 }}>›</span>
+              </>
+            )}
+            <span className="topbar-title" style={{ fontWeight: isMobile ? 600 : undefined, fontSize: isMobile ? 14 : undefined, color: isMobile ? 'var(--txt)' : undefined }}>{pageTitle}</span>
           </div>
-          <span style={{ fontSize: 11.5, color: 'var(--txt3)', letterSpacing: '.04em' }}>Sistema Comercial</span>
+          {!isMobile && <span style={{ fontSize: 11.5, color: 'var(--txt3)', letterSpacing: '.04em' }}>Sistema Comercial</span>}
         </div>
 
         <div className="page-content">

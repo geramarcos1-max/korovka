@@ -296,11 +296,18 @@ tr:hover td { background: #FDFAF5; }
 
 @media (max-width: 768px) {
   .grid-4 { grid-template-columns: 1fr 1fr; }
-  .grid-3 { grid-template-columns: 1fr; }
+  .grid-3 { grid-template-columns: 1fr 1fr; }
   .grid-2 { grid-template-columns: 1fr; }
   .form-row { grid-template-columns: 1fr; }
-  .page-content { padding: 16px; }
-  :root { --side-w: 0px; }
-  .sidebar { display: none; }
-  .main-area { margin-left: 0; width: 100%; }
+  .page-content { padding: 14px; }
+  .kpi-val { font-size: 22px; }
+  .card { padding: 16px; }
+  .topbar { padding: 0 14px; }
+  .page-hdr { flex-wrap: wrap; gap: 8px; }
+}
+
+@media (max-width: 480px) {
+  .grid-4 { grid-template-columns: 1fr 1fr; }
+  .grid-3 { grid-template-columns: 1fr; }
+  .kpi-val { font-size: 20px; }
 }
