@@ -57,6 +57,9 @@ const MOTIVOS = [
   { value: 'otro',           label: 'Otro' },
 ]
 
+// Tipos de movimiento que son transferencias — nunca son gastos
+const TIPOS_TRANSFERENCIA = new Set(['transferencia_salida', 'transferencia_entrada'])
+
 const CAT_LABELS = ['Operación', 'Logística', 'Marketing', 'Administrativo', 'Otro']
 const CAT_COLORS = {
   'Operación':      '#2B6B50',
@@ -203,9 +206,8 @@ export default function Caja() {
 
   const totalGeneral = balances.reduce((a, b) => a + b.saldo, 0)
 
-  // Propósitos de transferencia — nunca deben aparecer como gasto
-  const TRANS_PROPS = ['corte_caja', 'reembolso_gasto', 'reparto_ganancias']
-  const gastos = useMemo(() => movimientos.filter(m => m.tipo === 'gasto' && !TRANS_PROPS.includes(m.referencia_tipo)), [movimientos])
+  // Solo son gastos los movimientos con tipo estrictamente 'gasto' (nunca transferencias)
+  const gastos = useMemo(() => movimientos.filter(m => !TIPOS_TRANSFERENCIA.has(m.tipo) && m.tipo === 'gasto'), [movimientos])
   const inversiones = useMemo(() => gastos.filter(g => g.referencia_tipo === 'inversion'), [gastos])
   const soloGastos  = useMemo(() => gastos.filter(g => g.referencia_tipo !== 'inversion'), [gastos])
 
