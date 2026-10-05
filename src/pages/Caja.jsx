@@ -556,8 +556,8 @@ export default function Caja() {
                   </tr>
                 </thead>
                 <tbody>
-                  {movimientos.length === 0 && <tr><td colSpan={5} className="empty">Sin movimientos registrados</td></tr>}
-                  {movimientos.slice(0, 12).map(m => (
+                  {movsFiltrados.length === 0 && <tr><td colSpan={5} className="empty">Sin movimientos en el período</td></tr>}
+                  {movsFiltrados.slice(0, 12).map(m => (
                     <tr key={m.id}>
                       <td style={{ whiteSpace: 'nowrap', fontSize: 12, color: 'var(--txt3)' }}>
                         {new Date(m.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
