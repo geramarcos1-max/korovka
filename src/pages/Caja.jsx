@@ -177,6 +177,9 @@ export default function Caja() {
   const [personaErr, setPersonaErr]       = useState('')
   const [personaSaving, setPersonaSaving] = useState(false)
 
+  const [filtroDesde, setFiltroDesde] = useState('')
+  const [filtroHasta, setFiltroHasta] = useState('')
+
   const [histPersona, setHistPersona]   = useState('')
   const [histTipo, setHistTipo]         = useState('')
   const [gastosView, setGastosView]     = useState('tabla')
@@ -210,31 +213,40 @@ export default function Caja() {
 
   useEffect(() => { load() }, [])
 
+  const movsFiltrados = useMemo(() => {
+    if (!filtroDesde && !filtroHasta) return movimientos
+    return movimientos.filter(m => {
+      const d = (m.created_at || '').slice(0, 10)
+      if (filtroDesde && d < filtroDesde) return false
+      if (filtroHasta && d > filtroHasta) return false
+      return true
+    })
+  }, [movimientos, filtroDesde, filtroHasta])
+
   const balances = useMemo(() => {
     const map = {}
     for (const p of personas) map[p.id] = { ...p, saldo: 0 }
-    for (const m of movimientos) {
+    for (const m of movsFiltrados) {
       if (m.tipo === 'transferencia_entrada' && m.referencia_tipo === 'reembolso_gasto') {
         if (map[m.persona_id]) map[m.persona_id].saldo += Number(m.monto)
         continue
       }
       if (m.tipo === 'transferencia_salida' || m.tipo === 'transferencia_entrada') continue
-      // cobro_venta se muestra en su propia sección; no mezclar con gastos
       if (m.tipo === 'cobro_venta') continue
       if (map[m.persona_id]) map[m.persona_id].saldo += Number(m.monto)
     }
     return Object.values(map)
-  }, [personas, movimientos])
+  }, [personas, movsFiltrados])
 
   const cobrosPorPersona = useMemo(() => {
     const map = {}
-    for (const m of movimientos) {
+    for (const m of movsFiltrados) {
       if (m.tipo === 'cobro_venta') {
         map[m.persona_id] = (map[m.persona_id] || 0) + Number(m.monto)
       }
     }
     return map
-  }, [movimientos])
+  }, [movsFiltrados])
 
   const totalGeneral = balances.reduce((a, b) => a + b.saldo, 0)
 
@@ -435,7 +447,28 @@ export default function Caja() {
       {/* ── RESUMEN ── */}
       {tab === 'resumen' && (
         <div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 14, marginBottom: 20 }}>
+          {/* Filtro de período */}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, color: 'var(--txt3)', fontWeight: 500 }}>Período:</span>
+            <input type="date" className="form-input" style={{ width: 'auto', fontSize: 13, padding: '5px 10px' }}
+              value={filtroDesde} onChange={e => setFiltroDesde(e.target.value)} />
+            <span style={{ fontSize: 13, color: 'var(--txt3)' }}>→</span>
+            <input type="date" className="form-input" style={{ width: 'auto', fontSize: 13, padding: '5px 10px' }}
+              value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)} />
+            {(filtroDesde || filtroHasta) && (
+              <button className="btn btn-ghost btn-sm" onClick={() => { setFiltroDesde(''); setFiltroHasta('') }}>
+                Limpiar filtro
+              </button>
+            )}
+            {(filtroDesde || filtroHasta) && (
+              <span style={{ fontSize: 12, color: 'var(--amber-t)', fontWeight: 500 }}>
+                Mostrando período filtrado
+              </span>
+            )}
+          </div>
+
+          {/* Tarjetas KPI — 3 columnas iguales */}
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${balances.length + 1}, 1fr)`, gap: 14, marginBottom: 14 }}>
             {balances.map(p => (
               <div key={p.id} className="card" style={{ borderTop: `3px solid ${p.saldo >= 0 ? 'var(--ok)' : 'var(--red)'}` }}>
                 <div className="card-title">{p.nombre}</div>
@@ -443,27 +476,31 @@ export default function Caja() {
                   {fmtSigned(p.saldo)}
                 </div>
                 <div className="kpi-sub">
-                  {gastos.filter(g => g.persona_id === p.id).length} gastos · {movimientos.filter(m => m.persona_id === p.id && m.tipo === 'cobro_venta').length} cobros
+                  {movsFiltrados.filter(m => m.tipo === 'gasto' && m.persona_id === p.id).length} gastos
                 </div>
               </div>
             ))}
+            <div className="card" style={{ borderTop: '3px solid var(--red)', background: 'var(--red-s)' }}>
+              <div className="card-title">Gasto total</div>
+              <div className="kpi-val" style={{ color: 'var(--red)', fontSize: 24 }}>{fmtSigned(totalGeneral)}</div>
+              <div className="kpi-sub">suma de gastos</div>
+            </div>
+          </div>
+
+          {/* Tarjetas anchas */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 20 }}>
             {balances.length > 0 && (() => {
-              // Reparto por persona: sumamos transferencia_entrada (quien recibió)
               const repartoPorPersona = {}
-              for (const m of movimientos) {
+              for (const m of movsFiltrados) {
                 if (m.tipo === 'transferencia_entrada' && m.referencia_tipo === 'reparto_ganancias') {
                   repartoPorPersona[m.persona_id] = (repartoPorPersona[m.persona_id] || 0) + Number(m.monto)
                 }
               }
               const totalRepartido = Object.values(repartoPorPersona).reduce((a, b) => a + b, 0)
+              const totalCobros = Object.values(cobrosPorPersona).reduce((a, b) => a + b, 0)
               return (
                 <>
-                  <div className="card" style={{ borderTop: '3px solid var(--red)', background: 'var(--red-s)' }}>
-                    <div className="card-title">Gasto total</div>
-                    <div className="kpi-val" style={{ color: 'var(--red)', fontSize: 24 }}>{fmtSigned(totalGeneral)}</div>
-                    <div className="kpi-sub">suma de gastos</div>
-                  </div>
-                  <div className="card" style={{ borderTop: '3px solid var(--ok)', gridColumn: '1 / -1' }}>
+                  <div className="card" style={{ borderTop: '3px solid var(--ok)' }}>
                     <div className="card-title" style={{ marginBottom: 12 }}>Cobros en efectivo</div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: 8 }}>
                       {personas.map(p => (
@@ -473,14 +510,12 @@ export default function Caja() {
                         </div>
                       ))}
                     </div>
-                    {(() => {
-                      const totalCobros = Object.values(cobrosPorPersona).reduce((a, b) => a + b, 0)
-                      return totalCobros > 0
-                        ? <div style={{ fontSize: 12, color: 'var(--txt3)' }}>Total cobrado en efectivo: <strong style={{ color: 'var(--ok)' }}>{fmt(totalCobros)}</strong></div>
-                        : <div style={{ fontSize: 12, color: 'var(--txt3)' }}>Sin cobros de ventas en efectivo aún</div>
-                    })()}
+                    {totalCobros > 0
+                      ? <div style={{ fontSize: 12, color: 'var(--txt3)' }}>Total cobrado en efectivo: <strong style={{ color: 'var(--ok)' }}>{fmt(totalCobros)}</strong></div>
+                      : <div style={{ fontSize: 12, color: 'var(--txt3)' }}>Sin cobros de ventas en efectivo aún</div>
+                    }
                   </div>
-                  <div className="card" style={{ borderTop: '3px solid #7c3aed', gridColumn: '1 / -1' }}>
+                  <div className="card" style={{ borderTop: '3px solid #7c3aed' }}>
                     <div className="card-title" style={{ marginBottom: 12 }}>Reparto de ganancias</div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: totalRepartido > 0 ? 10 : 0 }}>
                       {personas.map(p => (
@@ -499,7 +534,7 @@ export default function Caja() {
               )
             })()}
             {balances.length === 0 && (
-              <div className="card" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '36px 20px' }}>
+              <div className="card" style={{ textAlign: 'center', padding: '36px 20px' }}>
                 <div style={{ fontSize: 28, marginBottom: 10 }}>💵</div>
                 <div style={{ fontSize: 13.5, color: 'var(--txt2)', marginBottom: 10 }}>Agrega personas para llevar el control de caja</div>
                 <button className="btn btn-amber" onClick={() => { setPersonaErr(''); setPersonaModal(true) }}>+ Agregar persona</button>
