@@ -46,6 +46,9 @@ export default function Dashboard() {
     transferenciaVentas: 0,
     cortesCaja: 0,
     reembolsosSalida: 0,
+    pvFacturado: 0,
+    pvCobrado: 0,
+    pvPorCobrar: 0,
   })
   const [regalados, setRegalados] = useState({ unidades: 0, valor: 0 })
   const [degustacion, setDegustacion] = useState({ unidades: 0, valor: 0 })
@@ -132,6 +135,8 @@ export default function Dashboard() {
         { data: vTransferencia },
         { data: cortesMovs },
         { data: reembolsosMovs },
+        { data: pvEntregas },
+        { data: pvCobros },
       ] = await Promise.all([
         supabase.from('ventas').select('total').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
         supabase.from('ventas').select('total').gte('fecha', mesInicio).in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
@@ -146,6 +151,8 @@ export default function Dashboard() {
         supabase.from('ventas').select('total').eq('metodo_pago', 'transferencia').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
         supabase.from('caja_movimientos').select('monto').eq('tipo', 'transferencia_salida').eq('referencia_tipo', 'corte_caja'),
         supabase.from('caja_movimientos').select('monto').eq('tipo', 'transferencia_salida').in('referencia_tipo', ['reembolso_gasto', 'reparto_ganancias']),
+        supabase.from('pv_entregas').select('total'),
+        supabase.from('pv_cobros').select('monto'),
       ])
 
       const sumTotal = arr => arr?.reduce((a, r) => a + Number(r.total || 0), 0) || 0
@@ -155,6 +162,8 @@ export default function Dashboard() {
       const transferenciaVentas = sumTotal(vTransferencia)
       const cortesCaja          = Math.abs((cortesMovs || []).reduce((a, m) => a + Number(m.monto || 0), 0))
       const reembolsosSalida    = Math.abs((reembolsosMovs || []).reduce((a, m) => a + Number(m.monto || 0), 0))
+      const pvFacturado         = (pvEntregas || []).reduce((a, e) => a + Number(e.total || 0), 0)
+      const pvCobrado           = (pvCobros || []).reduce((a, c) => a + Number(c.monto || 0), 0)
 
       setKpis({
         ventasTotales: sumTotal(vTotales),
@@ -165,6 +174,9 @@ export default function Dashboard() {
         transferenciaVentas,
         cortesCaja,
         reembolsosSalida,
+        pvFacturado,
+        pvCobrado,
+        pvPorCobrar: pvFacturado - pvCobrado,
       })
 
       const regUnidades = (vRegaladas || []).reduce((a, v) => a + (v.venta_items || []).reduce((b, i) => b + Number(i.cantidad || 0), 0), 0)
@@ -210,9 +222,30 @@ export default function Dashboard() {
           accent="#2563eb"
         />
         <KpiCard
-          label="Por cobrar"
+          label="Pago pendiente clientes"
           value={fmt(kpis.pendienteCobro)}
           sub="saldo pendiente"
+          accent="var(--amber)"
+        />
+      </div>
+
+      <div className="grid-4" style={{ marginBottom: 20 }}>
+        <KpiCard
+          label="PV · Facturado"
+          value={fmt(kpis.pvFacturado)}
+          sub="total entregas puntos de venta"
+          accent="var(--forest)"
+        />
+        <KpiCard
+          label="PV · Cobrado"
+          value={fmt(kpis.pvCobrado)}
+          sub="pagos recibidos"
+          accent="#2563eb"
+        />
+        <KpiCard
+          label="PV · Por cobrar"
+          value={fmt(kpis.pvPorCobrar)}
+          sub="pendiente de cobro"
           accent="var(--amber)"
         />
         <KpiCard
