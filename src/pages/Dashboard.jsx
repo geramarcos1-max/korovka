@@ -84,7 +84,7 @@ export default function Dashboard() {
         supabase.from('ventas').select('total').eq('metodo_pago', 'efectivo').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
         supabase.from('ventas').select('total').eq('metodo_pago', 'transferencia').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
         supabase.from('caja_movimientos').select('monto').eq('tipo', 'transferencia_salida').eq('referencia_tipo', 'corte_caja'),
-        supabase.from('caja_movimientos').select('monto').eq('tipo', 'transferencia_salida').eq('referencia_tipo', 'reembolso_gasto'),
+        supabase.from('caja_movimientos').select('monto').eq('tipo', 'transferencia_salida').in('referencia_tipo', ['reembolso_gasto', 'reparto_ganancias']),
       ])
 
       const sumTotal = arr => arr?.reduce((a, r) => a + Number(r.total || 0), 0) || 0
@@ -190,7 +190,7 @@ export default function Dashboard() {
             )}
             {kpis.reembolsosSalida > 0 && (
               <span style={{ fontSize: 12, color: 'var(--txt3)' }}>
-                Reembolsos pagados: <strong style={{ color: 'var(--red-t)' }}>−{fmt(kpis.reembolsosSalida)}</strong>
+                Transferencias salientes: <strong style={{ color: 'var(--red-t)' }}>−{fmt(kpis.reembolsosSalida)}</strong>
               </span>
             )}
           </div>
