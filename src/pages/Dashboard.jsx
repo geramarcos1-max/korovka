@@ -52,6 +52,67 @@ export default function Dashboard() {
   const [inventario, setInventario] = useState([])
   const [ultimas, setUltimas] = useState([])
 
+  const [histModal, setHistModal] = useState(null) // null | 'caja_chica' | 'banco'
+  const [histData, setHistData]   = useState([])
+  const [histLoading, setHistLoading] = useState(false)
+
+  async function openHist(tipo) {
+    setHistModal(tipo)
+    setHistLoading(true)
+    setHistData([])
+
+    if (tipo === 'caja_chica') {
+      const [{ data: ventas }, { data: cortes }] = await Promise.all([
+        supabase.from('ventas').select('folio, fecha, total, clientes(nombre)').eq('metodo_pago', 'efectivo').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']).order('fecha', { ascending: false }),
+        supabase.from('caja_movimientos').select('monto, concepto, created_at').eq('tipo', 'transferencia_salida').eq('referencia_tipo', 'corte_caja').order('created_at', { ascending: false }),
+      ])
+      const items = [
+        ...(ventas || []).map(v => ({
+          fecha: v.fecha,
+          label: `Cobro efectivo${v.clientes?.nombre ? ' · ' + v.clientes.nombre : ''}${v.folio ? ' #' + v.folio : ''}`,
+          monto: Number(v.total),
+          dir: 'entrada',
+        })),
+        ...(cortes || []).map(c => ({
+          fecha: c.created_at?.slice(0, 10),
+          label: c.concepto || 'Corte de caja',
+          monto: Math.abs(Number(c.monto)),
+          dir: 'salida',
+        })),
+      ].sort((a, b) => (b.fecha > a.fecha ? 1 : b.fecha < a.fecha ? -1 : 0))
+      setHistData(items)
+    } else {
+      const PROP = { reembolso_gasto: 'Reembolso de gasto', reparto_ganancias: 'Reparto de ganancias' }
+      const [{ data: ventas }, { data: cortesIn }, { data: salidas }] = await Promise.all([
+        supabase.from('ventas').select('folio, fecha, total, clientes(nombre)').eq('metodo_pago', 'transferencia').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']).order('fecha', { ascending: false }),
+        supabase.from('caja_movimientos').select('monto, concepto, created_at').eq('tipo', 'transferencia_salida').eq('referencia_tipo', 'corte_caja').order('created_at', { ascending: false }),
+        supabase.from('caja_movimientos').select('monto, concepto, referencia_tipo, created_at, personas(nombre)').eq('tipo', 'transferencia_salida').in('referencia_tipo', ['reembolso_gasto', 'reparto_ganancias']).order('created_at', { ascending: false }),
+      ])
+      const items = [
+        ...(ventas || []).map(v => ({
+          fecha: v.fecha,
+          label: `Cobro transferencia${v.clientes?.nombre ? ' · ' + v.clientes.nombre : ''}${v.folio ? ' #' + v.folio : ''}`,
+          monto: Number(v.total),
+          dir: 'entrada',
+        })),
+        ...(cortesIn || []).map(c => ({
+          fecha: c.created_at?.slice(0, 10),
+          label: c.concepto || 'Corte de caja',
+          monto: Math.abs(Number(c.monto)),
+          dir: 'entrada',
+        })),
+        ...(salidas || []).map(s => ({
+          fecha: s.created_at?.slice(0, 10),
+          label: `${PROP[s.referencia_tipo] || s.referencia_tipo}${s.personas?.nombre ? ' · ' + s.personas.nombre : ''}${s.concepto ? ' — ' + s.concepto : ''}`,
+          monto: Math.abs(Number(s.monto)),
+          dir: 'salida',
+        })),
+      ].sort((a, b) => (b.fecha > a.fecha ? 1 : b.fecha < a.fecha ? -1 : 0))
+      setHistData(items)
+    }
+    setHistLoading(false)
+  }
+
   useEffect(() => {
     async function load() {
       const hoy = new Date().toISOString().slice(0, 10)
@@ -132,6 +193,7 @@ export default function Dashboard() {
   const mesLabel = new Date().toLocaleString('es-MX', { month: 'long', year: 'numeric' })
 
   return (
+    <>
     <div>
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
@@ -162,8 +224,11 @@ export default function Dashboard() {
       </div>
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
-        <div className="card" style={{ borderTop: '3px solid #16a34a', gridColumn: 'span 2' }}>
-          <div className="card-title">Caja chica</div>
+        <div className="card" onClick={() => openHist('caja_chica')} style={{ borderTop: '3px solid #16a34a', gridColumn: 'span 2', cursor: 'pointer', transition: 'box-shadow .15s' }} onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(22,163,74,.15)'} onMouseLeave={e => e.currentTarget.style.boxShadow = ''}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div className="card-title">Caja chica</div>
+            <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, opacity: .7 }}>Ver historial →</span>
+          </div>
           <div className="kpi-val" style={{ color: '#16a34a' }}>{fmt(kpis.efectivoVentas - kpis.cortesCaja)}</div>
           <div style={{ display: 'flex', gap: 16, marginTop: 6, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 12, color: 'var(--txt3)' }}>
@@ -176,8 +241,11 @@ export default function Dashboard() {
             )}
           </div>
         </div>
-        <div className="card" style={{ borderTop: '3px solid #0284c7', gridColumn: 'span 2' }}>
-          <div className="card-title">Dinero en banco</div>
+        <div className="card" onClick={() => openHist('banco')} style={{ borderTop: '3px solid #0284c7', gridColumn: 'span 2', cursor: 'pointer', transition: 'box-shadow .15s' }} onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(2,132,199,.15)'} onMouseLeave={e => e.currentTarget.style.boxShadow = ''}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div className="card-title">Dinero en banco</div>
+            <span style={{ fontSize: 11, color: '#0284c7', fontWeight: 600, opacity: .7 }}>Ver historial →</span>
+          </div>
           <div className="kpi-val" style={{ color: '#0284c7' }}>{fmt(kpis.transferenciaVentas + kpis.cortesCaja - kpis.reembolsosSalida)}</div>
           <div style={{ display: 'flex', gap: 16, marginTop: 6, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 12, color: 'var(--txt3)' }}>
@@ -318,5 +386,77 @@ export default function Dashboard() {
       </div>
 
     </div>
+
+      {/* ── PANEL HISTORIAL ── */}
+      {histModal && (
+        <>
+          <div onClick={() => setHistModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 200 }} />
+          <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 420, maxWidth: '95vw', background: '#fff', zIndex: 201, display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 32px rgba(0,0,0,.12)' }}>
+            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--bdr)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: histModal === 'caja_chica' ? '#16a34a' : '#0284c7' }}>
+                  {histModal === 'caja_chica' ? 'Caja chica' : 'Dinero en banco'}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--txt3)', marginTop: 2 }}>
+                  {histModal === 'caja_chica' ? 'Efectivo en caja — historial de movimientos' : 'Cuenta bancaria — historial de movimientos'}
+                </div>
+              </div>
+              <button onClick={() => setHistModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: 'var(--txt3)', padding: 4, lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 0' }}>
+              {histLoading ? (
+                <div style={{ padding: 40, textAlign: 'center', color: 'var(--txt3)', fontSize: 13 }}>Cargando…</div>
+              ) : histData.length === 0 ? (
+                <div style={{ padding: 40, textAlign: 'center', color: 'var(--txt3)', fontSize: 13 }}>Sin movimientos registrados</div>
+              ) : (() => {
+                const sorted = [...histData].reverse()
+                let bal = 0
+                const withBal = sorted.map(item => {
+                  bal += item.dir === 'entrada' ? item.monto : -item.monto
+                  return { ...item, bal }
+                })
+                return withBal.reverse().map((item, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 24px', borderBottom: '1px solid var(--bdr)' }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, background: item.dir === 'entrada' ? 'var(--ok-s)' : 'var(--red-s)', color: item.dir === 'entrada' ? 'var(--ok-t)' : 'var(--red-t)' }}>
+                      {item.dir === 'entrada' ? '+' : '−'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</div>
+                      <div style={{ fontSize: 11, color: 'var(--txt3)', marginTop: 1 }}>{item.fecha}</div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: item.dir === 'entrada' ? 'var(--ok)' : 'var(--red)' }}>
+                        {item.dir === 'entrada' ? '+' : '−'}{fmt(item.monto)}
+                      </div>
+                      <div style={{ fontSize: 10.5, color: 'var(--txt3)', marginTop: 1 }}>saldo {fmt(item.bal)}</div>
+                    </div>
+                  </div>
+                ))
+              })()}
+            </div>
+            {!histLoading && histData.length > 0 && (() => {
+              const totalEnt = histData.filter(i => i.dir === 'entrada').reduce((a, i) => a + i.monto, 0)
+              const totalSal = histData.filter(i => i.dir === 'salida').reduce((a, i) => a + i.monto, 0)
+              return (
+                <div style={{ padding: '12px 24px', borderTop: '1px solid var(--bdr)', background: 'var(--bg2)', display: 'flex', gap: 20, flexShrink: 0 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--txt3)' }}>Total entradas</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ok)' }}>+{fmt(totalEnt)}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--txt3)' }}>Total salidas</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--red)' }}>−{fmt(totalSal)}</div>
+                  </div>
+                  <div style={{ marginLeft: 'auto' }}>
+                    <div style={{ fontSize: 11, color: 'var(--txt3)' }}>Saldo neto</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: histModal === 'caja_chica' ? '#16a34a' : '#0284c7' }}>{fmt(totalEnt - totalSal)}</div>
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+        </>
+      )}
+    </>
   )
 }
