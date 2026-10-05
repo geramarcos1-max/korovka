@@ -197,7 +197,12 @@ export default function Caja() {
     const map = {}
     for (const p of personas) map[p.id] = { ...p, saldo: 0 }
     for (const m of movimientos) {
-      // Las transferencias entre personas no afectan el saldo operativo individual
+      // Los reembolsos de gasto reducen lo que se le debe a la persona (saldo negativo → menos negativo)
+      if (m.tipo === 'transferencia_entrada' && m.referencia_tipo === 'reembolso_gasto') {
+        if (map[m.persona_id]) map[m.persona_id].saldo += Number(m.monto)
+        continue
+      }
+      // Todas las demás transferencias no afectan el saldo operativo individual
       if (m.tipo === 'transferencia_salida' || m.tipo === 'transferencia_entrada') continue
       if (map[m.persona_id]) map[m.persona_id].saldo += Number(m.monto)
     }

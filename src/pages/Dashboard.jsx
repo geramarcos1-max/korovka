@@ -45,6 +45,7 @@ export default function Dashboard() {
     efectivoVentas: 0,
     transferenciaVentas: 0,
     cortesCaja: 0,
+    reembolsosSalida: 0,
   })
   const [regalados, setRegalados] = useState({ unidades: 0, valor: 0 })
   const [degustacion, setDegustacion] = useState({ unidades: 0, valor: 0 })
@@ -69,6 +70,7 @@ export default function Dashboard() {
         { data: vEfectivo },
         { data: vTransferencia },
         { data: cortesMovs },
+        { data: reembolsosMovs },
       ] = await Promise.all([
         supabase.from('ventas').select('total').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
         supabase.from('ventas').select('total').gte('fecha', mesInicio).in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
@@ -82,6 +84,7 @@ export default function Dashboard() {
         supabase.from('ventas').select('total').eq('metodo_pago', 'efectivo').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
         supabase.from('ventas').select('total').eq('metodo_pago', 'transferencia').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
         supabase.from('caja_movimientos').select('monto').eq('tipo', 'transferencia_salida').eq('referencia_tipo', 'corte_caja'),
+        supabase.from('caja_movimientos').select('monto').eq('tipo', 'transferencia_salida').eq('referencia_tipo', 'reembolso_gasto'),
       ])
 
       const sumTotal = arr => arr?.reduce((a, r) => a + Number(r.total || 0), 0) || 0
@@ -90,6 +93,7 @@ export default function Dashboard() {
       const efectivoVentas     = sumTotal(vEfectivo)
       const transferenciaVentas = sumTotal(vTransferencia)
       const cortesCaja          = Math.abs((cortesMovs || []).reduce((a, m) => a + Number(m.monto || 0), 0))
+      const reembolsosSalida    = Math.abs((reembolsosMovs || []).reduce((a, m) => a + Number(m.monto || 0), 0))
 
       setKpis({
         ventasTotales: sumTotal(vTotales),
@@ -99,6 +103,7 @@ export default function Dashboard() {
         efectivoVentas,
         transferenciaVentas,
         cortesCaja,
+        reembolsosSalida,
       })
 
       const regUnidades = (vRegaladas || []).reduce((a, v) => a + (v.venta_items || []).reduce((b, i) => b + Number(i.cantidad || 0), 0), 0)
@@ -173,7 +178,7 @@ export default function Dashboard() {
         </div>
         <div className="card" style={{ borderTop: '3px solid #0284c7', gridColumn: 'span 2' }}>
           <div className="card-title">Dinero en banco</div>
-          <div className="kpi-val" style={{ color: '#0284c7' }}>{fmt(kpis.transferenciaVentas + kpis.cortesCaja)}</div>
+          <div className="kpi-val" style={{ color: '#0284c7' }}>{fmt(kpis.transferenciaVentas + kpis.cortesCaja - kpis.reembolsosSalida)}</div>
           <div style={{ display: 'flex', gap: 16, marginTop: 6, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 12, color: 'var(--txt3)' }}>
               Transferencias directas: <strong style={{ color: 'var(--txt2)' }}>{fmt(kpis.transferenciaVentas)}</strong>
@@ -181,6 +186,11 @@ export default function Dashboard() {
             {kpis.cortesCaja > 0 && (
               <span style={{ fontSize: 12, color: 'var(--txt3)' }}>
                 Cortes de caja: <strong style={{ color: 'var(--txt2)' }}>{fmt(kpis.cortesCaja)}</strong>
+              </span>
+            )}
+            {kpis.reembolsosSalida > 0 && (
+              <span style={{ fontSize: 12, color: 'var(--txt3)' }}>
+                Reembolsos pagados: <strong style={{ color: 'var(--red-t)' }}>−{fmt(kpis.reembolsosSalida)}</strong>
               </span>
             )}
           </div>
