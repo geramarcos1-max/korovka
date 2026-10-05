@@ -214,17 +214,27 @@ export default function Caja() {
     const map = {}
     for (const p of personas) map[p.id] = { ...p, saldo: 0 }
     for (const m of movimientos) {
-      // Los reembolsos de gasto reducen lo que se le debe a la persona (saldo negativo → menos negativo)
       if (m.tipo === 'transferencia_entrada' && m.referencia_tipo === 'reembolso_gasto') {
         if (map[m.persona_id]) map[m.persona_id].saldo += Number(m.monto)
         continue
       }
-      // Todas las demás transferencias no afectan el saldo operativo individual
       if (m.tipo === 'transferencia_salida' || m.tipo === 'transferencia_entrada') continue
+      // cobro_venta se muestra en su propia sección; no mezclar con gastos
+      if (m.tipo === 'cobro_venta') continue
       if (map[m.persona_id]) map[m.persona_id].saldo += Number(m.monto)
     }
     return Object.values(map)
   }, [personas, movimientos])
+
+  const cobrosPorPersona = useMemo(() => {
+    const map = {}
+    for (const m of movimientos) {
+      if (m.tipo === 'cobro_venta') {
+        map[m.persona_id] = (map[m.persona_id] || 0) + Number(m.monto)
+      }
+    }
+    return map
+  }, [movimientos])
 
   const totalGeneral = balances.reduce((a, b) => a + b.saldo, 0)
 
@@ -448,10 +458,27 @@ export default function Caja() {
               const totalRepartido = Object.values(repartoPorPersona).reduce((a, b) => a + b, 0)
               return (
                 <>
-                  <div className="card" style={{ borderTop: '3px solid var(--forest)', background: 'var(--forest-s)' }}>
-                    <div className="card-title">Total en caja</div>
-                    <div className="kpi-val" style={{ color: 'var(--forest)', fontSize: 24 }}>{fmtSigned(totalGeneral)}</div>
-                    <div className="kpi-sub">suma de todos</div>
+                  <div className="card" style={{ borderTop: '3px solid var(--red)', background: 'var(--red-s)' }}>
+                    <div className="card-title">Gasto total</div>
+                    <div className="kpi-val" style={{ color: 'var(--red)', fontSize: 24 }}>{fmtSigned(totalGeneral)}</div>
+                    <div className="kpi-sub">suma de gastos</div>
+                  </div>
+                  <div className="card" style={{ borderTop: '3px solid var(--ok)', gridColumn: '1 / -1' }}>
+                    <div className="card-title" style={{ marginBottom: 12 }}>Cobros en efectivo</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: 8 }}>
+                      {personas.map(p => (
+                        <div key={p.id} style={{ background: 'var(--ok-s)', borderRadius: 8, padding: '10px 14px' }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ok-t)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>{p.nombre}</div>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--ok)' }}>{fmt(cobrosPorPersona[p.id] || 0)}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {(() => {
+                      const totalCobros = Object.values(cobrosPorPersona).reduce((a, b) => a + b, 0)
+                      return totalCobros > 0
+                        ? <div style={{ fontSize: 12, color: 'var(--txt3)' }}>Total cobrado en efectivo: <strong style={{ color: 'var(--ok)' }}>{fmt(totalCobros)}</strong></div>
+                        : <div style={{ fontSize: 12, color: 'var(--txt3)' }}>Sin cobros de ventas en efectivo aún</div>
+                    })()}
                   </div>
                   <div className="card" style={{ borderTop: '3px solid #7c3aed', gridColumn: '1 / -1' }}>
                     <div className="card-title" style={{ marginBottom: 12 }}>Reparto de ganancias</div>
