@@ -124,7 +124,7 @@ export default function Dashboard() {
       const [
         { data: vTotales },
         { data: vMes },
-        { data: cxc },
+        { data: vPendientes },
         { data: cons },
         { data: recientes },
         { data: vRegaladas },
@@ -140,7 +140,7 @@ export default function Dashboard() {
       ] = await Promise.all([
         supabase.from('ventas').select('total').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
         supabase.from('ventas').select('total').gte('fecha', mesInicio).in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
-        supabase.from('cuentas_por_cobrar').select('monto_total, monto_pagado').in('estado', ['pendiente', 'parcial']),
+        supabase.from('ventas').select('total').eq('estado', 'pendiente'),
         supabase.from('consignacion_entregas').select('id').eq('estado', 'activa'),
         supabase.from('ventas').select('folio, fecha, total, estado, clientes(nombre)').order('created_at', { ascending: false }).limit(8),
         supabase.from('ventas').select('subtotal, venta_items(cantidad)').eq('estado', 'regalado'),
@@ -156,7 +156,6 @@ export default function Dashboard() {
       ])
 
       const sumTotal = arr => arr?.reduce((a, r) => a + Number(r.total || 0), 0) || 0
-      const sumPend  = arr => arr?.reduce((a, r) => a + Number(r.monto_total || 0) - Number(r.monto_pagado || 0), 0) || 0
 
       const efectivoVentas     = sumTotal(vEfectivo)
       const transferenciaVentas = sumTotal(vTransferencia)
@@ -168,7 +167,7 @@ export default function Dashboard() {
       setKpis({
         ventasTotales: sumTotal(vTotales),
         ventasMes: sumTotal(vMes),
-        pendienteCobro: sumPend(cxc),
+        pendienteCobro: sumTotal(vPendientes),
         consignacionesActivas: cons?.length || 0,
         efectivoVentas,
         transferenciaVentas,
