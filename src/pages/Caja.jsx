@@ -194,8 +194,8 @@ export default function Caja() {
     const map = {}
     for (const p of personas) map[p.id] = { ...p, saldo: 0 }
     for (const m of movimientos) {
-      // El reparto de ganancias no afecta el saldo operativo de cada persona
-      if (m.referencia_tipo === 'reparto_ganancias') continue
+      // Las transferencias entre personas no afectan el saldo operativo individual
+      if (m.tipo === 'transferencia_salida' || m.tipo === 'transferencia_entrada') continue
       if (map[m.persona_id]) map[m.persona_id].saldo += Number(m.monto)
     }
     return Object.values(map)
