@@ -79,6 +79,12 @@ function fmt(n) {
   return '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+function parseMonto(s) { return parseFloat(String(s || '').replace(/,/g, '')) || 0 }
+function formatMontoInput(s) {
+  const n = parseMonto(s)
+  return n > 0 ? n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : s
+}
+
 function fmtSigned(n) {
   const v = Number(n || 0)
   const str = '$' + Math.abs(v).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -269,14 +275,14 @@ export default function Caja() {
 
   async function saveGasto() {
     if (!gastoForm.persona_id) { setGastoErr('Selecciona quién pagó.'); return }
-    if (!gastoForm.monto || isNaN(Number(gastoForm.monto)) || Number(gastoForm.monto) <= 0) { setGastoErr('Ingresa un monto válido.'); return }
+    if (!gastoForm.monto || parseMonto(gastoForm.monto) <= 0) { setGastoErr('Ingresa un monto válido.'); return }
     setGastoSaving(true)
     const motivo = MOTIVOS.find(m => m.value === gastoForm.motivo)?.label || gastoForm.motivo
     const concepto = [motivo, gastoForm.notas].filter(Boolean).join(' — ')
     const { error } = await supabase.from('caja_movimientos').insert({
       persona_id: gastoForm.persona_id,
       tipo: 'gasto',
-      monto: -Math.abs(Number(gastoForm.monto)),
+      monto: -parseMonto(gastoForm.monto),
       concepto,
       referencia_tipo: gastoForm.tipo_registro,
       creado_por: profile?.id,
@@ -288,11 +294,11 @@ export default function Caja() {
   async function saveTransferencia() {
     if (!transForm.de_persona_id || !transForm.a_persona_id) { setTransErr('Selecciona ambas personas.'); return }
     if (transForm.de_persona_id === transForm.a_persona_id) { setTransErr('Las personas deben ser distintas.'); return }
-    if (!transForm.monto || isNaN(Number(transForm.monto)) || Number(transForm.monto) <= 0) { setTransErr('Ingresa un monto válido.'); return }
+    if (!transForm.monto || parseMonto(transForm.monto) <= 0) { setTransErr('Ingresa un monto válido.'); return }
     setTransSaving(true)
     const refId = crypto.randomUUID()
     const concepto = transForm.concepto || 'Transferencia entre personas'
-    const monto = Math.abs(Number(transForm.monto))
+    const monto = parseMonto(transForm.monto)
     const { error } = await supabase.from('caja_movimientos').insert([
       { persona_id: transForm.de_persona_id, tipo: 'transferencia_salida', monto: -monto, concepto, referencia_id: refId, referencia_tipo: transForm.proposito || 'corte_caja', creado_por: profile?.id },
       { persona_id: transForm.a_persona_id,  tipo: 'transferencia_entrada', monto,        concepto, referencia_id: refId, referencia_tipo: transForm.proposito || 'corte_caja', creado_por: profile?.id },
@@ -323,11 +329,11 @@ export default function Caja() {
 
   async function updateGasto() {
     if (!editGastoForm.persona_id) { setEditGastoErr('Selecciona quién pagó.'); return }
-    if (!editGastoForm.monto || isNaN(Number(editGastoForm.monto)) || Number(editGastoForm.monto) <= 0) { setEditGastoErr('Ingresa un monto válido.'); return }
+    if (!editGastoForm.monto || parseMonto(editGastoForm.monto) <= 0) { setEditGastoErr('Ingresa un monto válido.'); return }
     setEditGastoSaving(true)
     const { error } = await supabase.from('caja_movimientos').update({
       persona_id: editGastoForm.persona_id,
-      monto: -Math.abs(Number(editGastoForm.monto)),
+      monto: -parseMonto(editGastoForm.monto),
       concepto: editGastoForm.concepto,
       referencia_tipo: editGastoForm.tipo_registro,
     }).eq('id', editGastoForm.id)
@@ -353,9 +359,9 @@ export default function Caja() {
   async function updateTransferencia() {
     if (!editTransForm.de_persona_id || !editTransForm.a_persona_id) { setEditTransErr('Selecciona ambas personas.'); return }
     if (editTransForm.de_persona_id === editTransForm.a_persona_id) { setEditTransErr('Las personas deben ser distintas.'); return }
-    if (!editTransForm.monto || isNaN(Number(editTransForm.monto)) || Number(editTransForm.monto) <= 0) { setEditTransErr('Ingresa un monto válido.'); return }
+    if (!editTransForm.monto || parseMonto(editTransForm.monto) <= 0) { setEditTransErr('Ingresa un monto válido.'); return }
     setEditTransSaving(true)
-    const monto = Math.abs(Number(editTransForm.monto))
+    const monto = parseMonto(editTransForm.monto)
     const concepto = editTransForm.concepto || 'Transferencia entre personas'
     const proposito = editTransForm.proposito || 'corte_caja'
     const [r1, r2] = await Promise.all([
@@ -828,7 +834,7 @@ export default function Caja() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Monto *</label>
-                  <input type="number" className="form-input" value={gastoForm.monto} onChange={e => setGastoForm(f => ({ ...f, monto: e.target.value }))} placeholder="0.00" min="0" step="0.01" />
+                  <input type="text" inputMode="decimal" className="form-input" value={gastoForm.monto} onChange={e => setGastoForm(f => ({ ...f, monto: e.target.value.replace(/[^0-9.]/g, '') }))} onBlur={() => setGastoForm(f => ({ ...f, monto: formatMontoInput(f.monto) }))} onFocus={() => setGastoForm(f => ({ ...f, monto: String(f.monto).replace(/,/g, '') }))} placeholder="0.00" />
                 </div>
               </div>
               <div className="form-group">
@@ -895,7 +901,7 @@ export default function Caja() {
               </div>
               <div className="form-group">
                 <label className="form-label">Monto *</label>
-                <input type="number" className="form-input" value={transForm.monto} onChange={e => setTransForm(f => ({ ...f, monto: e.target.value }))} placeholder="0.00" min="0" step="0.01" />
+                <input type="text" inputMode="decimal" className="form-input" value={transForm.monto} onChange={e => setTransForm(f => ({ ...f, monto: e.target.value.replace(/[^0-9.]/g, '') }))} onBlur={() => setTransForm(f => ({ ...f, monto: formatMontoInput(f.monto) }))} onFocus={() => setTransForm(f => ({ ...f, monto: String(f.monto).replace(/,/g, '') }))} placeholder="0.00" />
               </div>
               <div className="form-group">
                 <label className="form-label">Propósito *</label>
@@ -944,7 +950,7 @@ export default function Caja() {
               </div>
               <div className="form-group">
                 <label className="form-label">Monto *</label>
-                <input type="number" className="form-input" value={editGastoForm.monto} onChange={e => setEditGastoForm(f => ({ ...f, monto: e.target.value }))} placeholder="0.00" min="0" step="0.01" />
+                <input type="text" inputMode="decimal" className="form-input" value={editGastoForm.monto} onChange={e => setEditGastoForm(f => ({ ...f, monto: e.target.value.replace(/[^0-9.]/g, '') }))} onBlur={() => setEditGastoForm(f => ({ ...f, monto: formatMontoInput(f.monto) }))} onFocus={() => setEditGastoForm(f => ({ ...f, monto: String(f.monto).replace(/,/g, '') }))} placeholder="0.00" />
               </div>
               <div className="form-group">
                 <label className="form-label">Pagado por *</label>
@@ -994,7 +1000,7 @@ export default function Caja() {
               </div>
               <div className="form-group">
                 <label className="form-label">Monto *</label>
-                <input type="number" className="form-input" value={editTransForm.monto} onChange={e => setEditTransForm(f => ({ ...f, monto: e.target.value }))} placeholder="0.00" min="0" step="0.01" />
+                <input type="text" inputMode="decimal" className="form-input" value={editTransForm.monto} onChange={e => setEditTransForm(f => ({ ...f, monto: e.target.value.replace(/[^0-9.]/g, '') }))} onBlur={() => setEditTransForm(f => ({ ...f, monto: formatMontoInput(f.monto) }))} onFocus={() => setEditTransForm(f => ({ ...f, monto: String(f.monto).replace(/,/g, '') }))} placeholder="0.00" />
               </div>
               <div className="form-group">
                 <label className="form-label">Propósito *</label>
