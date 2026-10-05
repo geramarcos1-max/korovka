@@ -35,11 +35,76 @@ function KpiCard({ label, value, sub, accent }) {
   )
 }
 
+const PERIODOS = [
+  { key: 'todo',   label: 'Todo' },
+  { key: '1m',     label: 'Último mes' },
+  { key: '3m',     label: 'Últ. 3 meses' },
+  { key: '6m',     label: 'Últ. 6 meses' },
+  { key: 'anio',   label: 'Este año' },
+  { key: 'custom', label: 'Personalizado' },
+]
+
+function getPeriodDates(periodo, customDesde, customHasta) {
+  const hoy = new Date()
+  const pad = n => String(n).padStart(2, '0')
+  const fmtD = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  const todayStr = fmtD(hoy)
+
+  if (periodo === 'todo') return { desde: null, hasta: null }
+  if (periodo === 'custom') return { desde: customDesde || null, hasta: customHasta || null }
+
+  const hasta = todayStr
+  let desde
+  if (periodo === '1m') {
+    const d = new Date(hoy); d.setMonth(d.getMonth() - 1)
+    desde = fmtD(d)
+  } else if (periodo === '3m') {
+    const d = new Date(hoy); d.setMonth(d.getMonth() - 3)
+    desde = fmtD(d)
+  } else if (periodo === '6m') {
+    const d = new Date(hoy); d.setMonth(d.getMonth() - 6)
+    desde = fmtD(d)
+  } else if (periodo === 'anio') {
+    desde = `${hoy.getFullYear()}-01-01`
+  }
+  return { desde, hasta }
+}
+
+function getPeriodLabel(periodo, customDesde, customHasta) {
+  if (periodo === 'todo') return 'histórico acumulado'
+  if (periodo === '1m') return 'último mes'
+  if (periodo === '3m') return 'últimos 3 meses'
+  if (periodo === '6m') return 'últimos 6 meses'
+  if (periodo === 'anio') return 'este año'
+  if (periodo === 'custom') {
+    if (customDesde && customHasta) return `${customDesde} → ${customHasta}`
+    if (customDesde) return `desde ${customDesde}`
+    if (customHasta) return `hasta ${customHasta}`
+    return 'personalizado'
+  }
+  return ''
+}
+
+function applyVentasDates(q, desde, hasta) {
+  if (desde) q = q.gte('fecha', desde)
+  if (hasta) q = q.lte('fecha', hasta)
+  return q
+}
+
+function applyCajaDates(q, desde, hasta) {
+  if (desde) q = q.gte('created_at', desde)
+  if (hasta) q = q.lte('created_at', hasta + 'T23:59:59')
+  return q
+}
+
 export default function Dashboard() {
   const [loading, setLoading] = useState(true)
+  const [periodo, setPeriodo] = useState('todo')
+  const [customDesde, setCustomDesde] = useState('')
+  const [customHasta, setCustomHasta] = useState('')
   const [kpis, setKpis] = useState({
     ventasTotales: 0,
-    ventasMes: 0,
+    ventasPeriodo: 0,
     pendienteCobro: 0,
     consignacionesActivas: 0,
     efectivoVentas: 0,
@@ -55,7 +120,7 @@ export default function Dashboard() {
   const [inventario, setInventario] = useState([])
   const [ultimas, setUltimas] = useState([])
 
-  const [histModal, setHistModal] = useState(null) // null | 'caja_chica' | 'banco'
+  const [histModal, setHistModal] = useState(null)
   const [histData, setHistData]   = useState([])
   const [histLoading, setHistLoading] = useState(false)
 
@@ -117,13 +182,46 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
+    setLoading(true)
+
     async function load() {
       const hoy = new Date().toISOString().slice(0, 10)
       const mesInicio = hoy.slice(0, 7) + '-01'
 
+      const { desde, hasta } = getPeriodDates(periodo, customDesde, customHasta)
+
+      // For period query: use periodo dates when set, else current month
+      const periodoDesde = desde || mesInicio
+      const periodoHasta = hasta  // null = no upper limit when 'todo'
+
+      // Build filtered queries
+      let qVentasPeriodo = supabase.from('ventas').select('total').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado'])
+      qVentasPeriodo = applyVentasDates(qVentasPeriodo, periodoDesde, periodoHasta)
+
+      let qVentasPendientes = supabase.from('ventas').select('total').eq('estado', 'pendiente')
+      qVentasPendientes = applyVentasDates(qVentasPendientes, desde, hasta)
+
+      let qVEfectivo = supabase.from('ventas').select('total').eq('metodo_pago', 'efectivo').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado'])
+      qVEfectivo = applyVentasDates(qVEfectivo, desde, hasta)
+
+      let qVTransferencia = supabase.from('ventas').select('total').eq('metodo_pago', 'transferencia').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado'])
+      qVTransferencia = applyVentasDates(qVTransferencia, desde, hasta)
+
+      let qCortes = supabase.from('caja_movimientos').select('monto').eq('tipo', 'transferencia_salida').eq('referencia_tipo', 'corte_caja')
+      qCortes = applyCajaDates(qCortes, desde, hasta)
+
+      let qReembolsos = supabase.from('caja_movimientos').select('monto').eq('tipo', 'transferencia_salida').in('referencia_tipo', ['reembolso_gasto', 'reparto_ganancias'])
+      qReembolsos = applyCajaDates(qReembolsos, desde, hasta)
+
+      let qPvEntregas = supabase.from('pv_entregas').select('total')
+      qPvEntregas = applyCajaDates(qPvEntregas, desde, hasta)
+
+      let qPvCobros = supabase.from('pv_cobros').select('monto')
+      qPvCobros = applyCajaDates(qPvCobros, desde, hasta)
+
       const [
         { data: vTotales },
-        { data: vMes },
+        { data: vPeriodo },
         { data: vPendientes },
         { data: cons },
         { data: recientes },
@@ -139,20 +237,20 @@ export default function Dashboard() {
         { data: pvCobros },
       ] = await Promise.all([
         supabase.from('ventas').select('total').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
-        supabase.from('ventas').select('total').gte('fecha', mesInicio).in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
-        supabase.from('ventas').select('total').eq('estado', 'pendiente'),
+        qVentasPeriodo,
+        qVentasPendientes,
         supabase.from('consignacion_entregas').select('id').eq('estado', 'activa'),
         supabase.from('ventas').select('folio, fecha, total, estado, clientes(nombre)').order('created_at', { ascending: false }).limit(8),
         supabase.from('ventas').select('subtotal, venta_items(cantidad)').eq('estado', 'regalado'),
         supabase.from('ventas').select('subtotal, venta_items(cantidad)').eq('estado', 'degustacion'),
         supabase.from('productos').select('id, nombre, unidad, precio_base').eq('activo', true).order('nombre'),
         supabase.from('movimientos_inventario').select('producto_id, cantidad'),
-        supabase.from('ventas').select('total').eq('metodo_pago', 'efectivo').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
-        supabase.from('ventas').select('total').eq('metodo_pago', 'transferencia').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
-        supabase.from('caja_movimientos').select('monto').eq('tipo', 'transferencia_salida').eq('referencia_tipo', 'corte_caja'),
-        supabase.from('caja_movimientos').select('monto').eq('tipo', 'transferencia_salida').in('referencia_tipo', ['reembolso_gasto', 'reparto_ganancias']),
-        supabase.from('pv_entregas').select('total'),
-        supabase.from('pv_cobros').select('monto'),
+        qVEfectivo,
+        qVTransferencia,
+        qCortes,
+        qReembolsos,
+        qPvEntregas,
+        qPvCobros,
       ])
 
       const sumTotal = arr => arr?.reduce((a, r) => a + Number(r.total || 0), 0) || 0
@@ -166,7 +264,7 @@ export default function Dashboard() {
 
       setKpis({
         ventasTotales: sumTotal(vTotales),
-        ventasMes: sumTotal(vMes),
+        ventasPeriodo: sumTotal(vPeriodo),
         pendienteCobro: sumTotal(vPendientes),
         consignacionesActivas: cons?.length || 0,
         efectivoVentas,
@@ -196,8 +294,12 @@ export default function Dashboard() {
       setUltimas(recientes || [])
       setLoading(false)
     }
+
     load()
-  }, [])
+  }, [periodo, customDesde, customHasta])
+
+  const periodoLabel = getPeriodLabel(periodo, customDesde, customHasta)
+  const periodoActivo = periodo !== 'todo'
 
   if (loading) return <div className="empty">Cargando…</div>
 
@@ -207,6 +309,57 @@ export default function Dashboard() {
     <>
     <div>
 
+      {/* ── FILTRO DE PERÍODO ── */}
+      <div style={{ background: 'var(--bg2)', border: '1px solid var(--bdr)', borderRadius: 'var(--r2)', padding: '12px 16px', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--txt2)', whiteSpace: 'nowrap' }}>Período:</span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
+            {PERIODOS.map(p => (
+              <button
+                key={p.key}
+                onClick={() => setPeriodo(p.key)}
+                style={{
+                  padding: '4px 12px',
+                  borderRadius: 100,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: periodo === p.key ? 'var(--forest)' : 'var(--cream-d)',
+                  color: periodo === p.key ? '#fff' : 'var(--txt2)',
+                  transition: 'background .15s, color .15s',
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          {periodoActivo && (
+            <span style={{ fontSize: 11, background: 'var(--forest-s)', color: 'var(--forest)', fontWeight: 600, padding: '2px 10px', borderRadius: 100, whiteSpace: 'nowrap' }}>
+              Aplica a todos los indicadores
+            </span>
+          )}
+        </div>
+        {periodo === 'custom' && (
+          <div style={{ display: 'flex', gap: 10, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={{ fontSize: 12, color: 'var(--txt2)', fontWeight: 600 }}>Desde</label>
+            <input
+              type="date"
+              value={customDesde}
+              onChange={e => setCustomDesde(e.target.value)}
+              style={{ fontSize: 12, padding: '4px 8px', borderRadius: 'var(--r1)', border: '1px solid var(--bdr)', background: '#fff' }}
+            />
+            <label style={{ fontSize: 12, color: 'var(--txt2)', fontWeight: 600 }}>Hasta</label>
+            <input
+              type="date"
+              value={customHasta}
+              onChange={e => setCustomHasta(e.target.value)}
+              style={{ fontSize: 12, padding: '4px 8px', borderRadius: 'var(--r1)', border: '1px solid var(--bdr)', background: '#fff' }}
+            />
+          </div>
+        )}
+      </div>
+
       <div className="grid-4" style={{ marginBottom: 20 }}>
         <KpiCard
           label="Ventas totales"
@@ -215,15 +368,15 @@ export default function Dashboard() {
           accent="var(--forest)"
         />
         <KpiCard
-          label="Ventas del mes"
-          value={fmt(kpis.ventasMes)}
-          sub={mesLabel}
+          label={periodoActivo ? 'Ventas del período' : 'Ventas del mes'}
+          value={fmt(kpis.ventasPeriodo)}
+          sub={periodoActivo ? periodoLabel : mesLabel}
           accent="#2563eb"
         />
         <KpiCard
           label="Pago pendiente clientes"
           value={fmt(kpis.pendienteCobro)}
-          sub="saldo pendiente"
+          sub={periodoActivo ? periodoLabel : 'saldo pendiente'}
           accent="var(--amber)"
         />
       </div>
@@ -232,19 +385,19 @@ export default function Dashboard() {
         <KpiCard
           label="PV · Facturado"
           value={fmt(kpis.pvFacturado)}
-          sub="total entregas puntos de venta"
+          sub={periodoActivo ? periodoLabel : 'total entregas puntos de venta'}
           accent="var(--forest)"
         />
         <KpiCard
           label="PV · Cobrado"
           value={fmt(kpis.pvCobrado)}
-          sub="pagos recibidos"
+          sub={periodoActivo ? periodoLabel : 'pagos recibidos'}
           accent="#2563eb"
         />
         <KpiCard
           label="PV · Por cobrar"
           value={fmt(kpis.pvPorCobrar)}
-          sub="pendiente de cobro"
+          sub={periodoActivo ? periodoLabel : 'pendiente de cobro'}
           accent="var(--amber)"
         />
         <KpiCard
@@ -259,7 +412,10 @@ export default function Dashboard() {
         <div className="card" onClick={() => openHist('caja_chica')} style={{ borderTop: '3px solid #16a34a', gridColumn: 'span 2', cursor: 'pointer', transition: 'box-shadow .15s' }} onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(22,163,74,.15)'} onMouseLeave={e => e.currentTarget.style.boxShadow = ''}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div className="card-title">Caja chica</div>
-            <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, opacity: .7 }}>Ver historial →</span>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              {periodoActivo && <span style={{ fontSize: 11, background: 'var(--ok-s)', color: 'var(--ok-t)', fontWeight: 600, padding: '2px 8px', borderRadius: 100 }}>{periodoLabel}</span>}
+              <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, opacity: .7 }}>Ver historial →</span>
+            </div>
           </div>
           <div className="kpi-val" style={{ color: '#16a34a' }}>{fmt(kpis.efectivoVentas - kpis.cortesCaja)}</div>
           <div style={{ display: 'flex', gap: 16, marginTop: 6, flexWrap: 'wrap' }}>
@@ -276,7 +432,10 @@ export default function Dashboard() {
         <div className="card" onClick={() => openHist('banco')} style={{ borderTop: '3px solid #0284c7', gridColumn: 'span 2', cursor: 'pointer', transition: 'box-shadow .15s' }} onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(2,132,199,.15)'} onMouseLeave={e => e.currentTarget.style.boxShadow = ''}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div className="card-title">Dinero en banco</div>
-            <span style={{ fontSize: 11, color: '#0284c7', fontWeight: 600, opacity: .7 }}>Ver historial →</span>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              {periodoActivo && <span style={{ fontSize: 11, background: 'var(--info-s)', color: 'var(--info-t)', fontWeight: 600, padding: '2px 8px', borderRadius: 100 }}>{periodoLabel}</span>}
+              <span style={{ fontSize: 11, color: '#0284c7', fontWeight: 600, opacity: .7 }}>Ver historial →</span>
+            </div>
           </div>
           <div className="kpi-val" style={{ color: '#0284c7' }}>{fmt(kpis.transferenciaVentas + kpis.cortesCaja - kpis.reembolsosSalida)}</div>
           <div style={{ display: 'flex', gap: 16, marginTop: 6, flexWrap: 'wrap' }}>
