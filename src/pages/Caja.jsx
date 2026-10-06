@@ -161,6 +161,8 @@ export default function Caja() {
   const [personas, setPersonas] = useState([])
   const [movimientos, setMovimientos] = useState([])
   const [loading, setLoading] = useState(true)
+  const [ventasPagadas, setVentasPagadas] = useState([])
+  const [pvCobros, setPvCobros] = useState([])
 
   const [gastoModal, setGastoModal]   = useState(false)
   const [gastoForm, setGastoForm]     = useState(emptyGasto)
@@ -199,15 +201,19 @@ export default function Caja() {
   const [editTransSaving, setEditTransSaving] = useState(false)
 
   async function load() {
-    const [{ data: p }, { data: m }] = await Promise.all([
+    const [{ data: p }, { data: m }, { data: v }, { data: pvc }] = await Promise.all([
       supabase.from('personas_caja').select('*').eq('activo', true).order('nombre'),
       supabase.from('caja_movimientos')
         .select('*, personas_caja(nombre)')
         .order('created_at', { ascending: false })
         .limit(500),
+      supabase.from('ventas').select('fecha, total, metodo_pago').eq('estado', 'pagada'),
+      supabase.from('pv_cobros').select('created_at, monto'),
     ])
     setPersonas(p || [])
     setMovimientos(m || [])
+    setVentasPagadas(v || [])
+    setPvCobros(pvc || [])
     setLoading(false)
   }
 
@@ -249,6 +255,24 @@ export default function Caja() {
   }, [movsFiltrados])
 
   const totalGeneral = balances.reduce((a, b) => a + b.saldo, 0)
+
+  const ingresos = useMemo(() => {
+    const vFilt = ventasPagadas.filter(v => {
+      if (filtroDesde && v.fecha < filtroDesde) return false
+      if (filtroHasta && v.fecha > filtroHasta) return false
+      return true
+    })
+    const pvFilt = pvCobros.filter(c => {
+      const d = (c.created_at || '').slice(0, 10)
+      if (filtroDesde && d < filtroDesde) return false
+      if (filtroHasta && d > filtroHasta) return false
+      return true
+    })
+    const efectivo      = vFilt.filter(v => v.metodo_pago === 'efectivo').reduce((a, v) => a + Number(v.total || 0), 0)
+    const transferencia = vFilt.filter(v => v.metodo_pago === 'transferencia').reduce((a, v) => a + Number(v.total || 0), 0)
+    const pv            = pvFilt.reduce((a, c) => a + Number(c.monto || 0), 0)
+    return { efectivo, transferencia, pv, total: efectivo + transferencia + pv }
+  }, [ventasPagadas, pvCobros, filtroDesde, filtroHasta])
 
   // Solo son gastos los movimientos con tipo estrictamente 'gasto' (nunca transferencias)
   const gastos = useMemo(() => movimientos.filter(m => !TIPOS_TRANSFERENCIA.has(m.tipo) && m.tipo === 'gasto'), [movimientos])
@@ -468,6 +492,32 @@ export default function Caja() {
             ) : (
               <span style={{ fontSize: 12, color: 'var(--txt3)' }}>Sin filtro — mostrando todos los movimientos</span>
             )}
+          </div>
+
+          {/* Tarjeta de ingresos */}
+          <div className="card" style={{ borderTop: '3px solid var(--ok)', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <div className="card-title" style={{ margin: 0 }}>Total ingresos</div>
+              {(filtroDesde || filtroHasta) && <span style={{ fontSize: 11, background: 'var(--amber-s)', color: 'var(--amber-t)', fontWeight: 600, padding: '2px 8px', borderRadius: 100 }}>{filtroDesde || '…'} → {filtroHasta || '…'}</span>}
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--ok)', marginBottom: 14 }}>{fmt(ingresos.total)}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+              <div style={{ background: 'var(--ok-s)', borderRadius: 8, padding: '10px 14px' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ok-t)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Efectivo</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--ok)' }}>{fmt(ingresos.efectivo)}</div>
+                <div style={{ fontSize: 11, color: 'var(--txt3)', marginTop: 2 }}>cobrado en caja</div>
+              </div>
+              <div style={{ background: 'var(--info-s)', borderRadius: 8, padding: '10px 14px' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--info-t)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Transferencia</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--info-t)' }}>{fmt(ingresos.transferencia)}</div>
+                <div style={{ fontSize: 11, color: 'var(--txt3)', marginTop: 2 }}>en banco</div>
+              </div>
+              <div style={{ background: 'var(--amber-s)', borderRadius: 8, padding: '10px 14px' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--amber-t)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Puntos de Venta</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--amber)' }}>{fmt(ingresos.pv)}</div>
+                <div style={{ fontSize: 11, color: 'var(--txt3)', marginTop: 2 }}>cobros PV</div>
+              </div>
+            </div>
           </div>
 
           {/* Tarjetas KPI — 3 columnas iguales */}
