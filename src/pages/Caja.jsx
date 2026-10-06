@@ -207,7 +207,7 @@ export default function Caja() {
         .select('*, personas_caja(nombre)')
         .order('created_at', { ascending: false })
         .limit(500),
-      supabase.from('ventas').select('fecha, total, metodo_pago').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
+      supabase.from('ventas').select('fecha, total, metodo_pago').eq('estado', 'pagada'),
       supabase.from('pv_cobros').select('created_at, monto'),
     ])
     setPersonas(p || [])

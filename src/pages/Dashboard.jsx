@@ -195,16 +195,16 @@ export default function Dashboard() {
       const periodoHasta = hasta  // null = no upper limit when 'todo'
 
       // Build filtered queries
-      let qVentasPeriodo = supabase.from('ventas').select('total').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado'])
+      let qVentasPeriodo = supabase.from('ventas').select('total').eq('estado', 'pagada')
       qVentasPeriodo = applyVentasDates(qVentasPeriodo, periodoDesde, periodoHasta)
 
       let qVentasPendientes = supabase.from('ventas').select('total').eq('estado', 'pendiente')
       qVentasPendientes = applyVentasDates(qVentasPendientes, desde, hasta)
 
-      let qVEfectivo = supabase.from('ventas').select('total').eq('metodo_pago', 'efectivo').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado'])
+      let qVEfectivo = supabase.from('ventas').select('total').eq('metodo_pago', 'efectivo').eq('estado', 'pagada')
       qVEfectivo = applyVentasDates(qVEfectivo, desde, hasta)
 
-      let qVTransferencia = supabase.from('ventas').select('total').eq('metodo_pago', 'transferencia').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado'])
+      let qVTransferencia = supabase.from('ventas').select('total').eq('metodo_pago', 'transferencia').eq('estado', 'pagada')
       qVTransferencia = applyVentasDates(qVTransferencia, desde, hasta)
 
       let qCortes = supabase.from('caja_movimientos').select('monto').eq('tipo', 'transferencia_salida').eq('referencia_tipo', 'corte_caja')
@@ -236,7 +236,7 @@ export default function Dashboard() {
         { data: pvEntregas },
         { data: pvCobros },
       ] = await Promise.all([
-        supabase.from('ventas').select('total').in('estado', ['pagada', 'pendiente', 'degustacion', 'regalado']),
+        supabase.from('ventas').select('total').eq('estado', 'pagada'),
         qVentasPeriodo,
         qVentasPendientes,
         supabase.from('consignacion_entregas').select('id').eq('estado', 'activa'),
