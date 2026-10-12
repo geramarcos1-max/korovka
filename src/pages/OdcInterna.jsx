@@ -104,14 +104,18 @@ export default function OdcInterna() {
   const [productos, setProductos] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
+  const [editOdc, setEditOdc] = useState(null)
   const [printData, setPrintData] = useState(null)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
+  const [editErr, setEditErr] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
 
   const emptyItem = { producto_id: '', cantidad: '', notas: '' }
   const [form, setForm] = useState({ fecha: new Date().toISOString().slice(0, 10), notas: '' })
   const [items, setItems] = useState([{ ...emptyItem }])
+  const [editForm, setEditForm] = useState({ fecha: '', notas: '' })
+  const [editItems, setEditItems] = useState([{ ...emptyItem }])
 
   async function load() {
     const [{ data: o }, { data: p }] = await Promise.all([
@@ -196,6 +200,43 @@ export default function OdcInterna() {
     load()
   }
 
+  async function openEdit(odc) {
+    const { data: its } = await supabase
+      .from('odc_interna_items')
+      .select('*, productos(nombre, unidad)')
+      .eq('odc_id', odc.id)
+    setEditForm({ fecha: odc.fecha, notas: odc.notas || '' })
+    setEditItems((its || []).map(it => ({ id: it.id, producto_id: it.producto_id, cantidad: String(it.cantidad), notas: it.notas || '' })))
+    setEditErr('')
+    setEditOdc(odc)
+  }
+
+  async function saveEdit() {
+    if (editItems.some(i => !i.producto_id || !i.cantidad)) {
+      setEditErr('Completa producto y cantidad en todos los renglones.')
+      return
+    }
+    setSaving(true)
+    const { error } = await supabase.from('odc_internas').update({
+      fecha: editForm.fecha,
+      notas: editForm.notas || null,
+    }).eq('id', editOdc.id)
+    if (error) { setSaving(false); setEditErr(error.message); return }
+
+    await supabase.from('odc_interna_items').delete().eq('odc_id', editOdc.id)
+    await supabase.from('odc_interna_items').insert(
+      editItems.map(i => ({
+        odc_id: editOdc.id,
+        producto_id: i.producto_id,
+        cantidad: Number(i.cantidad),
+        notas: i.notas || null,
+      }))
+    )
+    setSaving(false)
+    setEditOdc(null)
+    load()
+  }
+
   async function openPrint(odc) {
     const { data: its } = await supabase
       .from('odc_interna_items')
@@ -262,6 +303,9 @@ export default function OdcInterna() {
                   <td>
                     <div className="gap-8" style={{ flexWrap: 'wrap' }}>
                       <button className="btn btn-ghost btn-sm" onClick={() => openPrint(o)}>⬇ PDF</button>
+                      {o.estado === 'pendiente' && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => openEdit(o)}>Editar</button>
+                      )}
                       {o.estado === 'pendiente' && (
                         <button className="btn btn-sm" style={{ background: 'var(--info-s)', color: 'var(--info-t)', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }} onClick={() => marcarEnviado(o)}>
                           Marcar enviado
@@ -330,6 +374,56 @@ export default function OdcInterna() {
             <div className="modal-foot">
               <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
               <button className="btn btn-amber" onClick={save} disabled={saving}>{saving ? 'Guardando…' : 'Crear ODC'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editOdc && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditOdc(null)}>
+          <div className="modal" style={{ maxWidth: 620 }}>
+            <div className="modal-head">
+              <span className="modal-title">Editar ODC — {editOdc.folio}</span>
+              <button className="modal-close" onClick={() => setEditOdc(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Fecha</label>
+                  <input type="date" className="form-input" value={editForm.fecha} onChange={e => setEditForm(f => ({ ...f, fecha: e.target.value }))} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Notas generales</label>
+                <input className="form-input" value={editForm.notas} onChange={e => setEditForm(f => ({ ...f, notas: e.target.value }))} placeholder="Ej: Urgente, para la semana del 23…" />
+              </div>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10, marginTop: 4 }}>Productos requeridos</div>
+              {editItems.map((item, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 2fr auto', gap: 8, marginBottom: 8, alignItems: 'end' }}>
+                  <div>
+                    {i === 0 && <label className="form-label">Producto</label>}
+                    <select className="form-select" value={item.producto_id} onChange={e => setEditItems(its => { const n = [...its]; n[i] = { ...n[i], producto_id: e.target.value }; return n })}>
+                      <option value="">Seleccionar…</option>
+                      {productos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    {i === 0 && <label className="form-label">Cantidad</label>}
+                    <input type="number" className="form-input" value={item.cantidad} onChange={e => setEditItems(its => { const n = [...its]; n[i] = { ...n[i], cantidad: e.target.value }; return n })} min="0" step="1" placeholder="0" />
+                  </div>
+                  <div>
+                    {i === 0 && <label className="form-label">Notas</label>}
+                    <input className="form-input" value={item.notas} onChange={e => setEditItems(its => { const n = [...its]; n[i] = { ...n[i], notas: e.target.value }; return n })} placeholder="Opcional" />
+                  </div>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setEditItems(its => its.filter((_, idx) => idx !== i))} style={{ marginTop: i === 0 ? 18 : 0 }}>✕</button>
+                </div>
+              ))}
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditItems(its => [...its, { ...emptyItem }])} style={{ marginBottom: 14 }}>+ Agregar producto</button>
+              {editErr && <div style={{ color: 'var(--red)', fontSize: 13, marginTop: 4 }}>{editErr}</div>}
+            </div>
+            <div className="modal-foot">
+              <button className="btn btn-ghost" onClick={() => setEditOdc(null)}>Cancelar</button>
+              <button className="btn btn-amber" onClick={saveEdit} disabled={saving}>{saving ? 'Guardando…' : 'Guardar cambios'}</button>
             </div>
           </div>
         </div>
