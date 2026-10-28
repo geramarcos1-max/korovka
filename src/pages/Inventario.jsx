@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
@@ -8,6 +8,10 @@ function fmt(n) {
 
 function fmtInt(n) {
   return Number(n || 0).toLocaleString('es-MX')
+}
+
+function fmtMXN(n) {
+  return Number(n || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2 })
 }
 
 export default function Inventario() {
@@ -29,6 +33,15 @@ export default function Inventario() {
   const [etiqForm, setEtiqForm] = useState({ producto_id: '', tipo: 'entrada', cantidad: '', concepto: '', fecha: new Date().toISOString().slice(0, 10) })
   const [etiqErr, setEtiqErr] = useState('')
   const [etiqSaving, setEtiqSaving] = useState(false)
+
+  // mermas
+  const [mermas, setMermas] = useState([])
+  const emptyMerma = { producto_id: '', cantidad: '', fecha_caducidad: '', fecha_registro: new Date().toISOString().slice(0, 10), costo_unitario: '', notas: '' }
+  const [mermaModal, setMermaModal] = useState(false)
+  const [mermaForm, setMermaForm] = useState({ ...emptyMerma })
+  const [editMerma, setEditMerma] = useState(null)
+  const [mermaErr, setMermaErr] = useState('')
+  const [mermaSaving, setMermaSaving] = useState(false)
 
   async function load() {
     const [{ data: prods }, { data: movimientos }] = await Promise.all([
@@ -86,7 +99,73 @@ export default function Inventario() {
     setEtiqMovs(eMovsRecent || [])
   }
 
-  useEffect(() => { load(); loadEtiquetas() }, [])
+  async function loadMermas() {
+    const { data } = await supabase
+      .from('mermas')
+      .select('*, productos(nombre, unidad)')
+      .order('fecha_registro', { ascending: false })
+      .limit(200)
+    setMermas(data || [])
+  }
+
+  useEffect(() => { load(); loadEtiquetas(); loadMermas() }, [])
+
+  const mermaKpis = useMemo(() => {
+    const totalUnidades = mermas.reduce((a, m) => a + Number(m.cantidad || 0), 0)
+    const totalCosto = mermas.reduce((a, m) => {
+      const cu = Number(m.costo_unitario || 0)
+      const q  = Number(m.cantidad || 0)
+      return a + (cu > 0 ? cu * q : 0)
+    }, 0)
+    const conCosto = mermas.filter(m => Number(m.costo_unitario || 0) > 0).length
+    return { totalUnidades, totalCosto, conCosto, total: mermas.length }
+  }, [mermas])
+
+  async function saveMerma() {
+    if (!mermaForm.producto_id || !mermaForm.cantidad || !mermaForm.fecha_registro) {
+      setMermaErr('Producto, cantidad y fecha de registro son requeridos.')
+      return
+    }
+    setMermaSaving(true)
+    const payload = {
+      producto_id:    mermaForm.producto_id,
+      cantidad:       Number(mermaForm.cantidad),
+      fecha_caducidad: mermaForm.fecha_caducidad || null,
+      fecha_registro: mermaForm.fecha_registro,
+      costo_unitario: mermaForm.costo_unitario ? Number(mermaForm.costo_unitario) : null,
+      notas:          mermaForm.notas || null,
+      creado_por:     profile?.id,
+    }
+    const { error } = editMerma
+      ? await supabase.from('mermas').update(payload).eq('id', editMerma.id)
+      : await supabase.from('mermas').insert(payload)
+    setMermaSaving(false)
+    if (error) { setMermaErr(error.message); return }
+    setMermaModal(false)
+    setEditMerma(null)
+    setMermaForm({ ...emptyMerma })
+    loadMermas()
+  }
+
+  async function eliminarMerma(m) {
+    if (!window.confirm(`¿Eliminar este registro de merma?`)) return
+    await supabase.from('mermas').delete().eq('id', m.id)
+    loadMermas()
+  }
+
+  function openEditMerma(m) {
+    setMermaForm({
+      producto_id:    m.producto_id,
+      cantidad:       String(m.cantidad),
+      fecha_caducidad: m.fecha_caducidad || '',
+      fecha_registro: m.fecha_registro,
+      costo_unitario: m.costo_unitario != null ? String(m.costo_unitario) : '',
+      notas:          m.notas || '',
+    })
+    setEditMerma(m)
+    setMermaErr('')
+    setMermaModal(true)
+  }
 
   async function saveAjuste() {
     if (!form.producto_id || !form.cantidad || !form.concepto) {
@@ -140,15 +219,18 @@ export default function Inventario() {
     { key: 'stock',        label: 'Stock actual' },
     { key: 'movimientos',  label: 'Movimientos' },
     { key: 'etiquetas',    label: 'Etiquetas' },
+    { key: 'mermas',       label: 'Mermas / Caducados' },
   ]
 
   return (
     <div>
       <div className="page-hdr">
         <h2>Inventario</h2>
-        {tab !== 'etiquetas'
+        {tab === 'stock' || tab === 'movimientos'
           ? <button className="btn btn-amber" onClick={() => { setErr(''); setModal(true) }}>+ Ajuste manual</button>
-          : <button className="btn btn-amber" onClick={() => { setEtiqErr(''); setEtiqModal(true) }}>+ Movimiento etiquetas</button>
+          : tab === 'etiquetas'
+            ? <button className="btn btn-amber" onClick={() => { setEtiqErr(''); setEtiqModal(true) }}>+ Movimiento etiquetas</button>
+            : <button className="btn btn-amber" onClick={() => { setMermaErr(''); setEditMerma(null); setMermaForm({ ...emptyMerma }); setMermaModal(true) }}>+ Registrar merma</button>
         }
       </div>
 
@@ -308,6 +390,140 @@ export default function Inventario() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'mermas' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* KPIs */}
+          <div className="grid-3">
+            <div className="card">
+              <div className="card-title">Total registros</div>
+              <div className="kpi-val">{mermaKpis.total}</div>
+              <div className="kpi-sub">mermas registradas</div>
+            </div>
+            <div className="card">
+              <div className="card-title">Unidades perdidas</div>
+              <div className="kpi-val" style={{ color: 'var(--red)' }}>{fmt(mermaKpis.totalUnidades)}</div>
+              <div className="kpi-sub">unidades caducadas</div>
+            </div>
+            <div className="card">
+              <div className="card-title">Costo de mermas</div>
+              <div className="kpi-val" style={{ color: mermaKpis.totalCosto > 0 ? 'var(--red)' : 'var(--txt3)' }}>
+                {mermaKpis.totalCosto > 0 ? fmtMXN(mermaKpis.totalCosto) : '—'}
+              </div>
+              <div className="kpi-sub">
+                {mermaKpis.conCosto < mermaKpis.total
+                  ? `${mermaKpis.total - mermaKpis.conCosto} registro(s) sin costo capturado`
+                  : 'costo total estimado'}
+              </div>
+            </div>
+          </div>
+
+          {/* Tabla */}
+          <div className="card">
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha registro</th>
+                    <th>Producto</th>
+                    <th className="txt-right">Cantidad</th>
+                    <th>Fecha caducidad</th>
+                    <th className="txt-right">Costo unit.</th>
+                    <th className="txt-right">Costo total</th>
+                    <th>Notas</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mermas.length === 0 && <tr><td colSpan={8} className="empty">Sin registros de mermas</td></tr>}
+                  {mermas.map(m => {
+                    const cu = Number(m.costo_unitario || 0)
+                    const costoTotal = cu > 0 ? cu * Number(m.cantidad || 0) : null
+                    return (
+                      <tr key={m.id}>
+                        <td className="mono" style={{ fontSize: 12 }}>{m.fecha_registro}</td>
+                        <td style={{ fontWeight: 500 }}>{m.productos?.nombre}</td>
+                        <td className="txt-right mono" style={{ color: 'var(--red)', fontWeight: 600 }}>
+                          {fmt(m.cantidad)} <span style={{ color: 'var(--txt3)', fontWeight: 400 }}>{m.productos?.unidad}</span>
+                        </td>
+                        <td className="mono" style={{ fontSize: 12, color: 'var(--txt2)' }}>{m.fecha_caducidad || <span style={{ color: 'var(--txt3)' }}>—</span>}</td>
+                        <td className="txt-right mono" style={{ fontSize: 12, color: 'var(--txt2)' }}>
+                          {cu > 0 ? fmtMXN(cu) : <span style={{ color: 'var(--txt3)' }}>—</span>}
+                        </td>
+                        <td className="txt-right mono" style={{ fontWeight: 600, color: costoTotal ? 'var(--red)' : 'var(--txt3)' }}>
+                          {costoTotal ? fmtMXN(costoTotal) : '—'}
+                        </td>
+                        <td style={{ fontSize: 12, color: 'var(--txt2)', maxWidth: 160 }}>{m.notas || <span style={{ color: 'var(--txt3)' }}>—</span>}</td>
+                        <td>
+                          <div className="gap-8">
+                            <button className="btn btn-ghost btn-sm" onClick={() => openEditMerma(m)}>Editar</button>
+                            <button className="btn btn-red btn-sm" onClick={() => eliminarMerma(m)}>Eliminar</button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal mermas */}
+      {mermaModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setMermaModal(false)}>
+          <div className="modal">
+            <div className="modal-head">
+              <span className="modal-title">{editMerma ? 'Editar merma' : 'Registrar merma / caducado'}</span>
+              <button className="modal-close" onClick={() => { setMermaModal(false); setEditMerma(null) }}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label className="form-label">Producto *</label>
+                <select className="form-select" value={mermaForm.producto_id} onChange={e => setMermaForm(f => ({ ...f, producto_id: e.target.value }))}>
+                  <option value="">Seleccionar…</option>
+                  {productos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </select>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Cantidad perdida *</label>
+                  <input type="number" className="form-input" value={mermaForm.cantidad} onChange={e => setMermaForm(f => ({ ...f, cantidad: e.target.value }))} min="0" step="0.001" placeholder="0" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Costo unitario</label>
+                  <input type="number" className="form-input" value={mermaForm.costo_unitario} onChange={e => setMermaForm(f => ({ ...f, costo_unitario: e.target.value }))} min="0" step="0.01" placeholder="$ — (opcional)" />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Fecha de registro *</label>
+                  <input type="date" className="form-input" value={mermaForm.fecha_registro} onChange={e => setMermaForm(f => ({ ...f, fecha_registro: e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Fecha de caducidad</label>
+                  <input type="date" className="form-input" value={mermaForm.fecha_caducidad} onChange={e => setMermaForm(f => ({ ...f, fecha_caducidad: e.target.value }))} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Notas</label>
+                <input className="form-input" value={mermaForm.notas} onChange={e => setMermaForm(f => ({ ...f, notas: e.target.value }))} placeholder="Causa, lote, observaciones…" />
+              </div>
+              {mermaForm.cantidad && mermaForm.costo_unitario && (
+                <div style={{ background: 'var(--red-s)', border: '1px solid #F0C8C4', borderRadius: 6, padding: '10px 14px', fontSize: 13, color: 'var(--red-t)', marginTop: 4 }}>
+                  Costo estimado de esta merma: <strong>{fmtMXN(Number(mermaForm.cantidad) * Number(mermaForm.costo_unitario))}</strong>
+                </div>
+              )}
+              {mermaErr && <div style={{ color: 'var(--red)', fontSize: 13, marginTop: 8 }}>{mermaErr}</div>}
+            </div>
+            <div className="modal-foot">
+              <button className="btn btn-ghost" onClick={() => { setMermaModal(false); setEditMerma(null) }}>Cancelar</button>
+              <button className="btn btn-amber" onClick={saveMerma} disabled={mermaSaving}>{mermaSaving ? 'Guardando…' : editMerma ? 'Guardar cambios' : 'Registrar merma'}</button>
             </div>
           </div>
         </div>
