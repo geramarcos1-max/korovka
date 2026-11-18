@@ -35,7 +35,28 @@
   --side-w:   240px;
 }
 
-/* Sin modo oscuro — paleta Korovka siempre activa */
+/* ── Tokens: paleta Teo Bros ── */
+[data-business="teobros"] {
+  --forest:   #5C2D0A;
+  --forest-m: #3D1E06;
+  --forest-s: #F5EDE3;
+  --cream:    #FBF5EE;
+  --cream-d:  #F0E6D6;
+  --taupe:    #D4BFA8;
+  --taupe-d:  #C0A690;
+  --bg:       #FBF5EE;
+  --card:     #FFFFFF;
+  --bdr:      #E0CEB8;
+  --bdr2:     #CCBA9C;
+  --txt:      #1C0A04;
+  --txt2:     #5C3A20;
+  --txt3:     #9E7A5A;
+  --amber:    #C49A6C;
+  --amber-s:  #FBF0E0;
+  --amber-t:  #8B5E2A;
+}
+
+/* Sin modo oscuro — paleta siempre activa */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useBusiness } from '../context/BusinessContext'
 
 const Icon = ({ name, size = 16 }) => {
   const icons = {
@@ -16,6 +17,7 @@ const Icon = ({ name, size = 16 }) => {
     expand:    <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />,
     logout:    <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />,
     menu:      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />,
+    switch:    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />,
   }
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} style={{ flexShrink: 0, display: 'block' }}>
@@ -48,11 +50,18 @@ const titles = {
   '/productos': 'Productos',
 }
 
+const bizMeta = {
+  korovka: { name: 'Korovka', sub: 'Productos Lácteos', emoji: '🧀' },
+  teobros: { name: 'Teo Bros', sub: 'Chocolate Artesanal', emoji: '🍫' },
+}
+
 export default function Layout() {
   const { profile, user, signOut } = useAuth()
+  const { business } = useBusiness()
   const navigate = useNavigate()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
+  const biz = bizMeta[business] || bizMeta.korovka
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -98,7 +107,7 @@ export default function Layout() {
   const mainMargin = isMobile ? 0 : sw
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-business={business || 'korovka'}>
 
       {/* Mobile overlay */}
       {isMobile && mobileOpen && (
@@ -120,8 +129,8 @@ export default function Layout() {
           transition: 'padding .2s',
         }}>
           <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
-            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 600, color: '#F6EFDF', letterSpacing: '-.01em', lineHeight: 1 }}>Korovka</div>
-            <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(246,239,223,.45)', marginTop: 4 }}>Productos Lácteos</div>
+            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 600, color: '#F6EFDF', letterSpacing: '-.01em', lineHeight: 1 }}>{biz.name}</div>
+            <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(246,239,223,.45)', marginTop: 4 }}>{biz.sub}</div>
           </div>
           {!isMobile && (
             <button
@@ -172,6 +181,15 @@ export default function Layout() {
               </div>
             </div>
             <button
+              onClick={() => navigate('/negocio')}
+              style={{ background: 'none', border: '1px solid rgba(255,255,255,.15)', color: 'rgba(246,239,223,.55)', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', width: '100%', transition: 'color .12s, background .12s', marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(246,239,223,.10)'; e.currentTarget.style.color = '#F6EFDF' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'rgba(246,239,223,.55)' }}
+            >
+              <Icon name="switch" size={13} />
+              Cambiar negocio
+            </button>
+            <button
               onClick={handleSignOut}
               style={{ background: 'none', border: '1px solid rgba(255,255,255,.15)', color: 'rgba(246,239,223,.55)', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', width: '100%', transition: 'color .12s, background .12s' }}
               onMouseEnter={e => { e.currentTarget.style.background = 'rgba(246,239,223,.10)'; e.currentTarget.style.color = '#F6EFDF' }}
@@ -185,6 +203,15 @@ export default function Layout() {
             <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(246,239,223,.20)', color: '#F6EFDF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }}>
               {displayName[0].toUpperCase()}
             </div>
+            <button
+              onClick={() => navigate('/negocio')}
+              title="Cambiar negocio"
+              style={{ background: 'none', border: 'none', color: 'rgba(246,239,223,.50)', cursor: 'pointer', padding: 4, borderRadius: 6, display: 'flex', transition: 'color .12s' }}
+              onMouseEnter={e => { e.currentTarget.style.color = '#F6EFDF' }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'rgba(246,239,223,.50)' }}
+            >
+              <Icon name="switch" size={16} />
+            </button>
             <button
               onClick={handleSignOut}
               title="Cerrar sesión"
@@ -211,7 +238,7 @@ export default function Layout() {
             )}
             {!isMobile && (
               <>
-                <span style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 15, fontWeight: 600, color: 'var(--forest)', letterSpacing: '-.01em' }}>Korovka</span>
+                <span style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 15, fontWeight: 600, color: 'var(--forest)', letterSpacing: '-.01em' }}>{biz.name}</span>
                 <span style={{ color: 'var(--bdr2)', fontSize: 16 }}>›</span>
               </>
             )}

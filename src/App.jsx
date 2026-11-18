@@ -1,7 +1,9 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { BusinessProvider, useBusiness } from './context/BusinessContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
+import BusinessSelector from './pages/BusinessSelector'
 import Dashboard from './pages/Dashboard'
 import Ventas from './pages/Ventas'
 import Inventario from './pages/Inventario'
@@ -17,12 +19,22 @@ function PrivateRoute({ children }) {
   return user ? children : <Navigate to="/login" replace />
 }
 
+function BusinessRoute({ children }) {
+  const { user, loading } = useAuth()
+  const { business } = useBusiness()
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--txt3)' }}>Cargando…</div>
+  if (!user) return <Navigate to="/login" replace />
+  if (!business) return <Navigate to="/negocio" replace />
+  return children
+}
+
 function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/negocio" element={<PrivateRoute><BusinessSelector /></PrivateRoute>} />
       <Route path="/" element={
-        <PrivateRoute><Layout /></PrivateRoute>
+        <BusinessRoute><Layout /></BusinessRoute>
       }>
         <Route index element={<Dashboard />} />
         <Route path="ventas" element={<Ventas />} />
@@ -40,7 +52,9 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <BusinessProvider>
+        <AppRoutes />
+      </BusinessProvider>
     </AuthProvider>
   )
 }
