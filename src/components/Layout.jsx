@@ -120,27 +120,59 @@ export default function Layout() {
       <nav style={sidebarStyle}>
         {/* Brand */}
         <div style={{
-          padding: (!isMobile && collapsed) ? '18px 0' : '22px 18px 16px',
+          padding: (!isMobile && collapsed) ? '14px 0 10px' : '16px 14px 12px',
           borderBottom: '1px solid rgba(255,255,255,.10)',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: (!isMobile && collapsed) ? 'center' : 'space-between',
-          gap: 8,
+          flexDirection: 'column',
+          gap: 10,
           transition: 'padding .2s',
         }}>
-          <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
-            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 600, color: '#F6EFDF', letterSpacing: '-.01em', lineHeight: 1 }}>{biz.name}</div>
-            <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(246,239,223,.45)', marginTop: 4 }}>{biz.sub}</div>
+          {/* Top row: brand name + collapse button */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: (!isMobile && collapsed) ? 'center' : 'space-between', gap: 8 }}>
+            <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
+              {(!isMobile && collapsed)
+                ? <span style={{ fontSize: 22 }}>{biz.emoji}</span>
+                : <>
+                    <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 600, color: '#F6EFDF', letterSpacing: '-.01em', lineHeight: 1 }}>{biz.name}</div>
+                    <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(246,239,223,.45)', marginTop: 3 }}>{biz.sub}</div>
+                  </>
+              }
+            </div>
+            {!isMobile && (
+              <button
+                onClick={() => setCollapsed(c => !c)}
+                title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(246,239,223,.5)', padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'color .12s, background .12s', flexShrink: 0 }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#F6EFDF'; e.currentTarget.style.background = 'rgba(246,239,223,.10)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'rgba(246,239,223,.5)'; e.currentTarget.style.background = 'none' }}
+              >
+                <Icon name={collapsed ? 'expand' : 'collapse'} size={15} />
+              </button>
+            )}
           </div>
-          {!isMobile && (
+
+          {/* Business switcher pill */}
+          {(isMobile || !collapsed) && (
             <button
-              onClick={() => setCollapsed(c => !c)}
-              title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(246,239,223,.5)', padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'color .12s, background .12s', flexShrink: 0 }}
-              onMouseEnter={e => { e.currentTarget.style.color = '#F6EFDF'; e.currentTarget.style.background = 'rgba(246,239,223,.10)' }}
-              onMouseLeave={e => { e.currentTarget.style.color = 'rgba(246,239,223,.5)'; e.currentTarget.style.background = 'none' }}
+              onClick={() => navigate('/negocio')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: 'rgba(246,239,223,.12)',
+                border: '1px solid rgba(246,239,223,.18)',
+                borderRadius: 10, padding: '7px 10px',
+                cursor: 'pointer', width: '100%', textAlign: 'left',
+                transition: 'background .15s, border-color .15s',
+                color: '#F6EFDF',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(246,239,223,.20)'; e.currentTarget.style.borderColor = 'rgba(246,239,223,.30)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(246,239,223,.12)'; e.currentTarget.style.borderColor = 'rgba(246,239,223,.18)' }}
             >
-              <Icon name={collapsed ? 'expand' : 'collapse'} size={15} />
+              <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>{biz.emoji}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#F6EFDF', lineHeight: 1.2 }}>{biz.name}</div>
+                <div style={{ fontSize: 10, color: 'rgba(246,239,223,.50)', letterSpacing: '.04em', marginTop: 1 }}>Cambiar negocio</div>
+              </div>
+              <Icon name="switch" size={13} />
             </button>
           )}
         </div>
@@ -181,15 +213,6 @@ export default function Layout() {
               </div>
             </div>
             <button
-              onClick={() => navigate('/negocio')}
-              style={{ background: 'none', border: '1px solid rgba(255,255,255,.15)', color: 'rgba(246,239,223,.55)', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', width: '100%', transition: 'color .12s, background .12s', marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(246,239,223,.10)'; e.currentTarget.style.color = '#F6EFDF' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'rgba(246,239,223,.55)' }}
-            >
-              <Icon name="switch" size={13} />
-              Cambiar negocio
-            </button>
-            <button
               onClick={handleSignOut}
               style={{ background: 'none', border: '1px solid rgba(255,255,255,.15)', color: 'rgba(246,239,223,.55)', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', width: '100%', transition: 'color .12s, background .12s' }}
               onMouseEnter={e => { e.currentTarget.style.background = 'rgba(246,239,223,.10)'; e.currentTarget.style.color = '#F6EFDF' }}
@@ -203,15 +226,6 @@ export default function Layout() {
             <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(246,239,223,.20)', color: '#F6EFDF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }}>
               {displayName[0].toUpperCase()}
             </div>
-            <button
-              onClick={() => navigate('/negocio')}
-              title="Cambiar negocio"
-              style={{ background: 'none', border: 'none', color: 'rgba(246,239,223,.50)', cursor: 'pointer', padding: 4, borderRadius: 6, display: 'flex', transition: 'color .12s' }}
-              onMouseEnter={e => { e.currentTarget.style.color = '#F6EFDF' }}
-              onMouseLeave={e => { e.currentTarget.style.color = 'rgba(246,239,223,.50)' }}
-            >
-              <Icon name="switch" size={16} />
-            </button>
             <button
               onClick={handleSignOut}
               title="Cerrar sesión"
