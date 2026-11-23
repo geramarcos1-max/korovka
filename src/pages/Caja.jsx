@@ -204,7 +204,7 @@ export default function Caja() {
     const [{ data: p }, { data: m }, { data: v }, { data: pvc }] = await Promise.all([
       supabase.from('personas_caja').select('*').eq('activo', true).order('nombre'),
       supabase.from('caja_movimientos')
-        .select('*, personas_caja(nombre)')
+        .select('id, persona_id, tipo, monto, concepto, referencia_id, referencia_tipo, forma_pago, created_at, personas_caja(nombre)')
         .order('created_at', { ascending: false })
         .limit(500),
       supabase.from('ventas').select('fecha, total, metodo_pago').eq('estado', 'pagada'),
@@ -274,6 +274,13 @@ export default function Caja() {
     return { efectivo, transferencia, pv, total: efectivo + transferencia + pv }
   }, [ventasPagadas, pvCobros, filtroDesde, filtroHasta])
 
+  // Gastos de Korovka pagados en efectivo — restan del efectivo disponible en caja
+  const gastosKorovkaEfectivo = useMemo(() => {
+    return movimientos
+      .filter(m => m.tipo === 'gasto' && m.personas_caja?.nombre === 'Korovka' && m.forma_pago === 'efectivo')
+      .reduce((a, m) => a + Math.abs(Number(m.monto)), 0)
+  }, [movimientos])
+
   // Solo son gastos los movimientos con tipo estrictamente 'gasto' (nunca transferencias)
   const gastos = useMemo(() => movimientos.filter(m => !TIPOS_TRANSFERENCIA.has(m.tipo) && m.tipo === 'gasto'), [movimientos])
   const inversiones = useMemo(() => gastos.filter(g => g.referencia_tipo === 'inversion'), [gastos])
@@ -342,6 +349,7 @@ export default function Caja() {
       monto: -parseMonto(gastoForm.monto),
       concepto,
       referencia_tipo: gastoForm.tipo_registro,
+      forma_pago: gastoForm.forma_pago || null,
       creado_por: profile?.id,
     })
     if (error) { setGastoSaving(false); setGastoErr(error.message); return }
@@ -379,6 +387,7 @@ export default function Caja() {
       concepto: g.concepto || '',
       persona_id: g.persona_id || '',
       tipo_registro: g.referencia_tipo === 'inversion' ? 'inversion' : 'gasto',
+      forma_pago: g.forma_pago || 'efectivo',
     })
     setEditGastoErr('')
     setEditGastoModal(true)
@@ -393,6 +402,7 @@ export default function Caja() {
       monto: -parseMonto(editGastoForm.monto),
       concepto: editGastoForm.concepto,
       referencia_tipo: editGastoForm.tipo_registro,
+      forma_pago: editGastoForm.forma_pago || null,
     }).eq('id', editGastoForm.id)
     if (error) { setEditGastoSaving(false); setEditGastoErr(error.message); return }
     setEditGastoSaving(false); setEditGastoModal(false); load()
@@ -504,8 +514,17 @@ export default function Caja() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
               <div style={{ background: 'var(--ok-s)', borderRadius: 8, padding: '10px 14px' }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ok-t)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Efectivo</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--ok)' }}>{fmt(ingresos.efectivo)}</div>
-                <div style={{ fontSize: 11, color: 'var(--txt3)', marginTop: 2 }}>cobrado en caja</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: gastosKorovkaEfectivo > 0 ? (ingresos.efectivo - gastosKorovkaEfectivo >= 0 ? 'var(--ok)' : 'var(--red)') : 'var(--ok)' }}>
+                  {fmt(ingresos.efectivo - gastosKorovkaEfectivo)}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--txt3)', marginTop: 2 }}>
+                  cobrado en caja
+                  {gastosKorovkaEfectivo > 0 && (
+                    <span style={{ color: 'var(--red)', display: 'block', marginTop: 2 }}>
+                      − {fmt(gastosKorovkaEfectivo)} gastos
+                    </span>
+                  )}
+                </div>
               </div>
               <div style={{ background: 'var(--info-s)', borderRadius: 8, padding: '10px 14px' }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--info-t)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Transferencia</div>
@@ -999,6 +1018,12 @@ export default function Caja() {
                 <label className="form-label">Descripción / Notas</label>
                 <textarea className="form-input" rows={2} value={gastoForm.notas} onChange={e => setGastoForm(f => ({ ...f, notas: e.target.value }))} placeholder="Proveedor, referencia, descripción…" style={{ resize: 'vertical' }} />
               </div>
+              {personas.find(p => p.id === gastoForm.persona_id)?.nombre === 'Korovka' && gastoForm.forma_pago === 'efectivo' && (
+                <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--amber-s)', border: '1px solid var(--bdr)', fontSize: 12.5, color: 'var(--amber-t)', display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span>💵</span>
+                  <span>Este gasto <strong>restará del efectivo disponible en caja</strong>.</span>
+                </div>
+              )}
               {gastoErr && <div style={{ color: 'var(--red)', fontSize: 13 }}>{gastoErr}</div>}
             </div>
             <div className="modal-foot">
@@ -1087,12 +1112,22 @@ export default function Caja() {
                 <label className="form-label">Monto *</label>
                 <input type="text" inputMode="decimal" className="form-input" value={editGastoForm.monto} onChange={e => setEditGastoForm(f => ({ ...f, monto: formatMontoInput(e.target.value) }))} placeholder="0.00" />
               </div>
-              <div className="form-group">
-                <label className="form-label">Pagado por *</label>
-                <select className="form-select" value={editGastoForm.persona_id} onChange={e => setEditGastoForm(f => ({ ...f, persona_id: e.target.value }))}>
-                  <option value="">Seleccionar…</option>
-                  {personas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </select>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Pagado por *</label>
+                  <select className="form-select" value={editGastoForm.persona_id} onChange={e => setEditGastoForm(f => ({ ...f, persona_id: e.target.value }))}>
+                    <option value="">Seleccionar…</option>
+                    {personas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Forma de pago</label>
+                  <select className="form-select" value={editGastoForm.forma_pago || 'efectivo'} onChange={e => setEditGastoForm(f => ({ ...f, forma_pago: e.target.value }))}>
+                    <option value="efectivo">Efectivo</option>
+                    <option value="transferencia">Transferencia</option>
+                    <option value="tarjeta">Tarjeta</option>
+                  </select>
+                </div>
               </div>
               <div className="form-group">
                 <label className="form-label">Concepto</label>
