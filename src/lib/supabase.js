@@ -16,6 +16,7 @@ const NO_FILTER = new Set([
   'consignacion_entrega_items',
   'consignacion_liquidaciones',
   'consignacion_liquidacion_items',
+  'costos_lote_items',
 ])
 
 let _biz = localStorage.getItem('activeBusiness') || 'korovka'

@@ -296,6 +296,7 @@ tr:hover td { background: #FDFAF5; }
 .mono { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; }
 .txt-right  { text-align: right; }
 .txt-center { text-align: center; }
+.gap-4 { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .gap-8 { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .mt-4  { margin-top: 4px; }
 .mt-8  { margin-top: 8px; }

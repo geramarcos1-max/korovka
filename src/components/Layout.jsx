@@ -18,6 +18,7 @@ const Icon = ({ name, size = 16 }) => {
     logout:    <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />,
     menu:      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />,
     switch:    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />,
+    costos:    <><path strokeLinecap="round" strokeLinejoin="round" d="M9 7H6a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2v-3M15 3h3m0 0v3m0-3l-6 6" /></>,
   }
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} style={{ flexShrink: 0, display: 'block' }}>
@@ -34,6 +35,7 @@ const nav = [
   { to: '/caja', label: 'Caja', icon: 'caja' },
   { to: '/odc-interna', label: 'ODC Interna', icon: 'odc' },
   { to: '/inteligencia', label: 'Inteligencia', icon: 'intel' },
+  { to: '/costos', label: 'Costos', icon: 'costos' },
   { label: 'CATÁLOGOS', type: 'label' },
   { to: '/inventario', label: 'Inventario', icon: 'inventario' },
   { to: '/productos', label: 'Productos', icon: 'productos' },
@@ -48,6 +50,7 @@ const titles = {
   '/inteligencia': 'Inteligencia Comercial',
   '/inventario': 'Inventario',
   '/productos': 'Productos',
+  '/costos': 'Costos de Producción',
 }
 
 const bizMeta = {
